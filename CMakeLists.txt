@@ -15,6 +15,14 @@ option(SHERPA_WARNINGS_AS_ERRORS "Treat Sherpa compiler warnings as errors" OFF)
 find_package(CLI11 CONFIG REQUIRED)
 find_package(SQLite3 REQUIRED)
 
+if(TARGET SQLite3::SQLite3)
+  set(SHERPA_SQLITE_TARGET SQLite3::SQLite3)
+elseif(TARGET SQLite::SQLite3)
+  set(SHERPA_SQLITE_TARGET SQLite::SQLite3)
+else()
+  message(FATAL_ERROR "FindSQLite3 did not provide a supported imported target")
+endif()
+
 function(sherpa_enable_warnings target)
   if(MSVC)
     target_compile_options(${target} PRIVATE /W4 /permissive-)
@@ -62,7 +70,7 @@ target_include_directories(
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/generated>"
     "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>"
 )
-target_link_libraries(sherpa_core PUBLIC SQLite3::SQLite3)
+target_link_libraries(sherpa_core PUBLIC ${SHERPA_SQLITE_TARGET})
 sherpa_enable_warnings(sherpa_core)
 
 add_executable(sherpa src/cli/main.cpp)
