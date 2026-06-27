@@ -21,7 +21,7 @@ jobs:
             preset: dev
           - os: macos-latest
             preset: dev
-          - os: windows-latest
+          - os: windows-2022
             preset: dev-windows
 
     steps:
