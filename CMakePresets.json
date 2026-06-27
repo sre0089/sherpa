@@ -27,6 +27,22 @@
         "CMAKE_BUILD_TYPE": "Release",
         "BUILD_TESTING": "OFF"
       }
+    },
+    {
+      "name": "dev-windows",
+      "displayName": "Windows developer build",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/dev-windows",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "cacheVariables": {
+        "BUILD_TESTING": "ON",
+        "SHERPA_WARNINGS_AS_ERRORS": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -37,12 +53,25 @@
     {
       "name": "release",
       "configurePreset": "release"
+    },
+    {
+      "name": "dev-windows",
+      "configurePreset": "dev-windows",
+      "configuration": "Debug"
     }
   ],
   "testPresets": [
     {
       "name": "dev",
       "configurePreset": "dev",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "dev-windows",
+      "configurePreset": "dev-windows",
+      "configuration": "Debug",
       "output": {
         "outputOnFailure": true
       }

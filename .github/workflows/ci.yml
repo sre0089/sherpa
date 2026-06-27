@@ -16,10 +16,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
-          - windows-latest
+        include:
+          - os: ubuntu-latest
+            preset: dev
+          - os: macos-latest
+            preset: dev
+          - os: windows-latest
+            preset: dev-windows
 
     steps:
       - name: Check out source
@@ -34,11 +37,11 @@ jobs:
       - name: Configure
         shell: bash
         run: >-
-          cmake --preset dev
+          cmake --preset "${{ matrix.preset }}"
           -DCMAKE_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
 
       - name: Build
-        run: cmake --build --preset dev
+        run: cmake --build --preset "${{ matrix.preset }}"
 
       - name: Test
-        run: ctest --preset dev
+        run: ctest --preset "${{ matrix.preset }}"
