@@ -1,0 +1,3 @@
+#pragma once
+
+#define SHERPA_VERSION "@PROJECT_VERSION@"

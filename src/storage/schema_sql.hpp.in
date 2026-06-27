@@ -1,0 +1,7 @@
+#pragma once
+
+namespace sherpa {
+
+inline constexpr const char* kInitialSchema = R"SHERPA_SQL(@SHERPA_SCHEMA_SQL@)SHERPA_SQL";
+
+}  // namespace sherpa

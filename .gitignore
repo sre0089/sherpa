@@ -1,0 +1,9 @@
+/build/
+/out/
+/vcpkg_installed/
+/.cache/
+/.DS_Store
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+compile_commands.json

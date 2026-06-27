@@ -1,0 +1,11 @@
+{
+  "name": "sherpa",
+  "version-semver": "0.1.0",
+  "description": "Evidence-backed codebase intelligence",
+  "builtin-baseline": "a0400024711b283056538ac19ced80b91a83c24c",
+  "dependencies": [
+    "cli11",
+    "sqlite3",
+    "catch2"
+  ]
+}
