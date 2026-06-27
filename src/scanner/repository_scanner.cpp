@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <string_view>
 #include <system_error>
 
 #include "sherpa/util/fingerprint.hpp"
@@ -13,16 +14,18 @@ namespace {
 constexpr std::uintmax_t kMaximumFileSize = 16U * 1024U * 1024U;
 
 bool is_ignored_directory(const std::filesystem::path& path) {
-  static constexpr std::array ignored_names = {
+  static constexpr std::array<std::string_view, 8> ignored_names = {
       ".git", ".hg", ".svn", ".sherpa", "build", "out", "dist", "node_modules",
   };
   const auto name = path.filename().string();
-  return std::ranges::find(ignored_names, name) != ignored_names.end();
+  return std::ranges::any_of(
+      ignored_names, [&name](std::string_view ignored_name) { return name == ignored_name; });
 }
 
 std::string lowercase(std::string value) {
-  std::ranges::transform(value, value.begin(),
-                         [](unsigned char character) { return std::tolower(character); });
+  std::ranges::transform(value, value.begin(), [](unsigned char character) {
+    return static_cast<char>(std::tolower(character));
+  });
   return value;
 }
 
@@ -42,11 +45,13 @@ bool is_within(const std::filesystem::path& root, const std::filesystem::path& c
 }  // namespace
 
 bool RepositoryScanner::is_supported_source(const std::filesystem::path& path) {
-  static constexpr std::array extensions = {
+  static constexpr std::array<std::string_view, 9> extensions = {
       ".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".inc",
   };
   const auto extension = lowercase(path.extension().string());
-  return std::ranges::find(extensions, extension) != extensions.end();
+  return std::ranges::any_of(extensions, [&extension](std::string_view supported_extension) {
+    return extension == supported_extension;
+  });
 }
 
 ScanResult RepositoryScanner::scan(const std::filesystem::path& repository_path) const {
