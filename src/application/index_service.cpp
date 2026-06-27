@@ -1,7 +1,9 @@
 #include "sherpa/application/index_service.hpp"
 
 #include <cstdlib>
+#include <optional>
 #include <stdexcept>
+#include <string>
 
 #include "sherpa/scanner/repository_scanner.hpp"
 #include "sherpa/storage/sqlite_database.hpp"
@@ -10,21 +12,39 @@
 namespace sherpa {
 namespace {
 
+std::optional<std::string> environment_variable(const char* name) {
+#if defined(_WIN32)
+  char* value = nullptr;
+  std::size_t value_size = 0;
+  if (_dupenv_s(&value, &value_size, name) != 0 || value == nullptr) {
+    return std::nullopt;
+  }
+  std::string result(value);
+  std::free(value);
+  return result;
+#else
+  if (const char* value = std::getenv(name)) {
+    return std::string(value);
+  }
+  return std::nullopt;
+#endif
+}
+
 std::filesystem::path cache_root() {
 #if defined(_WIN32)
-  if (const char* local_app_data = std::getenv("LOCALAPPDATA")) {
-    return std::filesystem::path(local_app_data) / "Sherpa" / "Cache";
+  if (const auto local_app_data = environment_variable("LOCALAPPDATA")) {
+    return std::filesystem::path(*local_app_data) / "Sherpa" / "Cache";
   }
 #elif defined(__APPLE__)
-  if (const char* home = std::getenv("HOME")) {
-    return std::filesystem::path(home) / "Library" / "Caches" / "Sherpa";
+  if (const auto home = environment_variable("HOME")) {
+    return std::filesystem::path(*home) / "Library" / "Caches" / "Sherpa";
   }
 #else
-  if (const char* xdg_cache = std::getenv("XDG_CACHE_HOME")) {
-    return std::filesystem::path(xdg_cache) / "sherpa";
+  if (const auto xdg_cache = environment_variable("XDG_CACHE_HOME")) {
+    return std::filesystem::path(*xdg_cache) / "sherpa";
   }
-  if (const char* home = std::getenv("HOME")) {
-    return std::filesystem::path(home) / ".cache" / "sherpa";
+  if (const auto home = environment_variable("HOME")) {
+    return std::filesystem::path(*home) / ".cache" / "sherpa";
   }
 #endif
   return std::filesystem::temp_directory_path() / "sherpa";
