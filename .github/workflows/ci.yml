@@ -34,11 +34,19 @@ jobs:
           vcpkgGitCommitId: a0400024711b283056538ac19ced80b91a83c24c
           runVcpkgInstall: false
 
-      - name: Configure
+      - name: Configure (Unix)
+        if: runner.os != 'Windows'
         shell: bash
         run: >-
           cmake --preset "${{ matrix.preset }}"
           -DCMAKE_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: >-
+          cmake --preset "${{ matrix.preset }}"
+          "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
 
       - name: Build
         run: cmake --build --preset "${{ matrix.preset }}"
