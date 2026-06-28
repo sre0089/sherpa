@@ -22,9 +22,15 @@ ctest --preset dev
 
 ```sh
 ./build/dev/sherpa index /path/to/repository
+cd /path/to/repository
+sherpa callers qualified::symbol
+sherpa callees qualified::symbol
 ```
 
-Use `--database <path>` to override the platform cache location.
+Queries use the current directory as the repository by default. Use `--repo <path>` to query
+another repository, `--database <path>` to override the platform cache location, and
+`--format json` for machine-readable output. See [Querying the graph](docs/querying.md) for the
+lookup and ambiguity rules.
 
 ## Status
 

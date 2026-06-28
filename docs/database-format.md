@@ -8,5 +8,8 @@ directives, parser diagnostics, relationships, and ambiguous relationship candid
 indexing transaction atomically replaces the repository's prior active run. Version 1 and version 2
 databases are migrated automatically.
 
+Graph queries open the database read-only and require schema version 3. They never create or migrate
+an index; indexing remains the only write path.
+
 The `content_fingerprint` column currently uses FNV-1a 64-bit for fast change detection. It is not
 a cryptographic integrity check.

@@ -4,7 +4,9 @@
 #include <stdexcept>
 #include <string>
 
+#include "sherpa/application/call_query_service.hpp"
 #include "sherpa/application/index_service.hpp"
+#include "sherpa/presentation/call_query_renderer.hpp"
 #include "sherpa/version.hpp"
 
 namespace {
@@ -13,8 +15,49 @@ enum class ExitCode {
   kSuccess = 0,
   kUsage = 2,
   kRepositoryUnavailable = 3,
+  kIndexUnavailable = 4,
+  kSymbolNotFound = 5,
+  kAmbiguousSymbol = 6,
   kInternalFailure = 10,
 };
+
+int run_query(sherpa::CallQueryDirection direction, const std::string& symbol,
+              const std::filesystem::path& repository_path,
+              const std::filesystem::path& database_path, const std::string& format) {
+  try {
+    const auto result = sherpa::CallQueryService{}.query({
+        .direction = direction,
+        .symbol = symbol,
+        .repository_path = repository_path,
+        .database_path = database_path,
+    });
+    if (format == "json") {
+      sherpa::write_call_query_json(std::cout, result);
+    } else {
+      sherpa::write_call_query_text(std::cout, result);
+    }
+    return static_cast<int>(ExitCode::kSuccess);
+  } catch (const sherpa::IndexUnavailableError& error) {
+    std::cerr << "error: " << error.what() << '\n';
+    return static_cast<int>(ExitCode::kIndexUnavailable);
+  } catch (const sherpa::SymbolNotFoundError& error) {
+    std::cerr << "error: " << error.what() << '\n';
+    return static_cast<int>(ExitCode::kSymbolNotFound);
+  } catch (const sherpa::AmbiguousSymbolError& error) {
+    std::cerr << "error: " << error.what() << '\n';
+    for (const auto& candidate : error.candidates()) {
+      std::cerr << "  " << candidate.qualified_name << " (" << candidate.signature << ") at "
+                << candidate.file_path << ':' << candidate.range.start_line << '\n';
+    }
+    return static_cast<int>(ExitCode::kAmbiguousSymbol);
+  } catch (const std::invalid_argument& error) {
+    std::cerr << "error: " << error.what() << '\n';
+    return static_cast<int>(ExitCode::kRepositoryUnavailable);
+  } catch (const std::exception& error) {
+    std::cerr << "error: query failed: " << error.what() << '\n';
+    return static_cast<int>(ExitCode::kInternalFailure);
+  }
+}
 
 }  // namespace
 
@@ -28,6 +71,30 @@ int main(int argc, char** argv) {
   auto* index_command = app.add_subcommand("index", "Index C and C++ files in a repository");
   index_command->add_option("repo", repository_path, "Repository path")->required();
   index_command->add_option("--database", database_path, "Explicit SQLite database path");
+
+  std::string callers_symbol;
+  std::filesystem::path callers_repository{"."};
+  std::filesystem::path callers_database;
+  std::string callers_format{"text"};
+  auto* callers_command = app.add_subcommand("callers", "Find functions that call a symbol");
+  callers_command->add_option("symbol", callers_symbol, "Qualified or unqualified symbol name")
+      ->required();
+  callers_command->add_option("--repo", callers_repository, "Indexed repository path");
+  callers_command->add_option("--database", callers_database, "Explicit SQLite database path");
+  callers_command->add_option("--format", callers_format, "Output format: text or json")
+      ->check(CLI::IsMember({"text", "json"}));
+
+  std::string callees_symbol;
+  std::filesystem::path callees_repository{"."};
+  std::filesystem::path callees_database;
+  std::string callees_format{"text"};
+  auto* callees_command = app.add_subcommand("callees", "Find functions called by a symbol");
+  callees_command->add_option("symbol", callees_symbol, "Qualified or unqualified symbol name")
+      ->required();
+  callees_command->add_option("--repo", callees_repository, "Indexed repository path");
+  callees_command->add_option("--database", callees_database, "Explicit SQLite database path");
+  callees_command->add_option("--format", callees_format, "Output format: text or json")
+      ->check(CLI::IsMember({"text", "json"}));
 
   try {
     app.parse(argc, argv);
@@ -67,6 +134,15 @@ int main(int argc, char** argv) {
       std::cerr << "error: indexing failed: " << error.what() << '\n';
       return static_cast<int>(ExitCode::kInternalFailure);
     }
+  }
+
+  if (*callers_command) {
+    return run_query(sherpa::CallQueryDirection::kCallers, callers_symbol, callers_repository,
+                     callers_database, callers_format);
+  }
+  if (*callees_command) {
+    return run_query(sherpa::CallQueryDirection::kCallees, callees_symbol, callees_repository,
+                     callees_database, callees_format);
   }
 
   return static_cast<int>(ExitCode::kUsage);

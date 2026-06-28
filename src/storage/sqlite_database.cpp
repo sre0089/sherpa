@@ -7,6 +7,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <tuple>
 
 #include "sherpa/storage/schema_sql.hpp"
@@ -93,15 +94,70 @@ void bind_optional_id(sqlite3* database, sqlite3_stmt* statement, int index,
         value ? sqlite3_bind_int64(statement, index, *value) : sqlite3_bind_null(statement, index));
 }
 
+std::string column_text(sqlite3_stmt* statement, int index) {
+  const auto* value = sqlite3_column_text(statement, index);
+  return value == nullptr ? std::string{} : reinterpret_cast<const char*>(value);
+}
+
+SourceRange column_range(sqlite3_stmt* statement, int first_index) {
+  return SourceRange{
+      .start_line = static_cast<std::uint32_t>(sqlite3_column_int64(statement, first_index)),
+      .start_column = static_cast<std::uint32_t>(sqlite3_column_int64(statement, first_index + 1)),
+      .end_line = static_cast<std::uint32_t>(sqlite3_column_int64(statement, first_index + 2)),
+      .end_column = static_cast<std::uint32_t>(sqlite3_column_int64(statement, first_index + 3)),
+      .start_byte = static_cast<std::uint32_t>(sqlite3_column_int64(statement, first_index + 4)),
+      .end_byte = static_cast<std::uint32_t>(sqlite3_column_int64(statement, first_index + 5)),
+  };
+}
+
+QuerySymbol column_symbol(sqlite3_stmt* statement, int first_index) {
+  return QuerySymbol{
+      .kind = column_text(statement, first_index),
+      .name = column_text(statement, first_index + 1),
+      .qualified_name = column_text(statement, first_index + 2),
+      .signature = column_text(statement, first_index + 3),
+      .file_path = column_text(statement, first_index + 4),
+      .range = column_range(statement, first_index + 5),
+  };
+}
+
+ResolutionStatus resolution_status(std::string_view value) {
+  if (value == "resolved") {
+    return ResolutionStatus::kResolved;
+  }
+  if (value == "ambiguous") {
+    return ResolutionStatus::kAmbiguous;
+  }
+  if (value == "unresolved") {
+    return ResolutionStatus::kUnresolved;
+  }
+  throw std::runtime_error("database contains an invalid relationship resolution");
+}
+
+Confidence confidence(std::string_view value) {
+  if (value == "high") {
+    return Confidence::kHigh;
+  }
+  if (value == "medium") {
+    return Confidence::kMedium;
+  }
+  if (value == "low") {
+    return Confidence::kLow;
+  }
+  throw std::runtime_error("database contains an invalid relationship confidence");
+}
+
 }  // namespace
 
-SqliteDatabase::SqliteDatabase(const std::filesystem::path& path) {
-  if (!path.parent_path().empty()) {
+SqliteDatabase::SqliteDatabase(const std::filesystem::path& path, DatabaseOpenMode mode) {
+  if (mode == DatabaseOpenMode::kReadWriteCreate && !path.parent_path().empty()) {
     std::filesystem::create_directories(path.parent_path());
   }
   const auto path_string = path.string();
-  if (sqlite3_open_v2(path_string.c_str(), &database_, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE,
-                      nullptr) != SQLITE_OK) {
+  const int flags = mode == DatabaseOpenMode::kReadOnly
+                        ? SQLITE_OPEN_READONLY
+                        : (SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE);
+  if (sqlite3_open_v2(path_string.c_str(), &database_, flags, nullptr) != SQLITE_OK) {
     const std::string message =
         database_ == nullptr ? "could not open SQLite database" : sqlite3_errmsg(database_);
     sqlite3_close(database_);
@@ -136,6 +192,14 @@ int SqliteDatabase::schema_version() const {
   return sqlite3_column_int(statement.get(), 0);
 }
 
+void SqliteDatabase::validate_schema() const {
+  constexpr int kSupportedSchemaVersion = 3;
+  const int version = schema_version();
+  if (version != kSupportedSchemaVersion) {
+    throw std::runtime_error("unsupported database schema version: " + std::to_string(version));
+  }
+}
+
 void SqliteDatabase::initialize_schema() {
   execute(kInitialSchema);
   constexpr int kSupportedSchemaVersion = 3;
@@ -166,6 +230,125 @@ void SqliteDatabase::initialize_schema() {
   if (version != kSupportedSchemaVersion) {
     throw std::runtime_error("unsupported database schema version: " + std::to_string(version));
   }
+}
+
+bool SqliteDatabase::has_completed_index(const std::string& canonical_repository_path) const {
+  Statement statement(database_,
+                      "SELECT 1 FROM repositories repository "
+                      "JOIN index_runs run ON run.id = repository.active_run_id "
+                      "WHERE repository.canonical_path = ?1 AND run.status = 'completed' LIMIT 1");
+  bind_text(database_, statement.get(), 1, canonical_repository_path);
+  return sqlite3_step(statement.get()) == SQLITE_ROW;
+}
+
+std::vector<StoredQuerySymbol> SqliteDatabase::find_definition_symbols(
+    const std::string& canonical_repository_path, const std::string& query) const {
+  const auto find = [&](const char* name_column) {
+    const std::string sql =
+        "SELECT symbol.id, symbol.kind, symbol.name, symbol.qualified_name, symbol.signature, "
+        "file.relative_path, symbol.start_line, symbol.start_column, symbol.end_line, "
+        "symbol.end_column, symbol.start_byte, symbol.end_byte "
+        "FROM symbols symbol "
+        "JOIN files file ON file.id = symbol.file_id "
+        "JOIN index_runs run ON run.id = file.run_id "
+        "JOIN repositories repository ON repository.active_run_id = run.id "
+        "WHERE repository.canonical_path = ?1 AND symbol.role = 'definition' AND symbol." +
+        std::string(name_column) +
+        " = ?2 "
+        "ORDER BY symbol.qualified_name, file.relative_path, symbol.start_byte";
+    Statement statement(database_, sql.c_str());
+    bind_text(database_, statement.get(), 1, canonical_repository_path);
+    bind_text(database_, statement.get(), 2, query);
+
+    std::vector<StoredQuerySymbol> symbols;
+    while (sqlite3_step(statement.get()) == SQLITE_ROW) {
+      symbols.push_back(StoredQuerySymbol{
+          .id = sqlite3_column_int64(statement.get(), 0),
+          .symbol = column_symbol(statement.get(), 1),
+      });
+    }
+    return symbols;
+  };
+
+  auto symbols = find("qualified_name");
+  if (symbols.empty()) {
+    symbols = find("name");
+  }
+  return symbols;
+}
+
+std::vector<CallQueryEntry> SqliteDatabase::query_calls(std::int64_t symbol_id,
+                                                        CallQueryDirection direction) const {
+  const char* filter = direction == CallQueryDirection::kCallees
+                           ? "relationship.source_symbol_id = ?1"
+                           : "(relationship.target_symbol_id = ?1 OR EXISTS ("
+                             "SELECT 1 FROM relationship_candidates matching_candidate "
+                             "WHERE matching_candidate.relationship_id = relationship.id "
+                             "AND matching_candidate.target_symbol_id = ?1))";
+  const std::string sql =
+      "SELECT relationship.id, relationship.target_text, relationship.resolution, "
+      "relationship.confidence, relationship.provenance, relationship.start_line, "
+      "relationship.start_column, relationship.end_line, relationship.end_column, "
+      "relationship.start_byte, relationship.end_byte, "
+      "source_symbol.kind, source_symbol.name, source_symbol.qualified_name, "
+      "source_symbol.signature, source_file.relative_path, source_symbol.start_line, "
+      "source_symbol.start_column, source_symbol.end_line, source_symbol.end_column, "
+      "source_symbol.start_byte, source_symbol.end_byte, "
+      "target_symbol.kind, target_symbol.name, target_symbol.qualified_name, "
+      "target_symbol.signature, target_file.relative_path, target_symbol.start_line, "
+      "target_symbol.start_column, target_symbol.end_line, target_symbol.end_column, "
+      "target_symbol.start_byte, target_symbol.end_byte "
+      "FROM relationships relationship "
+      "JOIN symbols source_symbol ON source_symbol.id = relationship.source_symbol_id "
+      "JOIN files source_file ON source_file.id = source_symbol.file_id "
+      "LEFT JOIN symbols target_symbol ON target_symbol.id = relationship.target_symbol_id "
+      "LEFT JOIN files target_file ON target_file.id = target_symbol.file_id "
+      "WHERE relationship.kind = 'calls' AND " +
+      std::string(filter) +
+      " ORDER BY source_file.relative_path, relationship.start_byte, relationship.id";
+  Statement statement(database_, sql.c_str());
+  check(database_, sqlite3_bind_int64(statement.get(), 1, symbol_id));
+
+  Statement candidate_statement(
+      database_,
+      "SELECT symbol.kind, symbol.name, symbol.qualified_name, symbol.signature, "
+      "file.relative_path, symbol.start_line, symbol.start_column, symbol.end_line, "
+      "symbol.end_column, symbol.start_byte, symbol.end_byte, candidate.reason, candidate.rank "
+      "FROM relationship_candidates candidate "
+      "JOIN symbols symbol ON symbol.id = candidate.target_symbol_id "
+      "JOIN files file ON file.id = symbol.file_id "
+      "WHERE candidate.relationship_id = ?1 ORDER BY candidate.rank");
+
+  std::vector<CallQueryEntry> calls;
+  while (sqlite3_step(statement.get()) == SQLITE_ROW) {
+    CallQueryEntry call{
+        .caller = column_symbol(statement.get(), 11),
+        .callee = std::nullopt,
+        .target_text = column_text(statement.get(), 1),
+        .resolution = resolution_status(column_text(statement.get(), 2)),
+        .confidence = confidence(column_text(statement.get(), 3)),
+        .provenance = column_text(statement.get(), 4),
+        .evidence = column_range(statement.get(), 5),
+        .candidates = {},
+    };
+    if (sqlite3_column_type(statement.get(), 22) != SQLITE_NULL) {
+      call.callee = column_symbol(statement.get(), 22);
+    }
+
+    sqlite3_reset(candidate_statement.get());
+    sqlite3_clear_bindings(candidate_statement.get());
+    check(database_, sqlite3_bind_int64(candidate_statement.get(), 1,
+                                        sqlite3_column_int64(statement.get(), 0)));
+    while (sqlite3_step(candidate_statement.get()) == SQLITE_ROW) {
+      call.candidates.push_back(CallQueryCandidate{
+          .symbol = column_symbol(candidate_statement.get(), 0),
+          .reason = column_text(candidate_statement.get(), 11),
+          .rank = static_cast<std::uint32_t>(sqlite3_column_int64(candidate_statement.get(), 12)),
+      });
+    }
+    calls.push_back(std::move(call));
+  }
+  return calls;
 }
 
 void SqliteDatabase::replace_index(const std::filesystem::path& repository_path,

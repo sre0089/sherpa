@@ -19,3 +19,8 @@ Call resolution currently prefers exact lexical or qualified names, then unique 
 names. Member calls without type information are low confidence. Overloads remain ambiguous when
 syntax alone cannot select one definition. Quoted includes use relative, repository-root, or unique
 suffix matching; system includes remain unresolved.
+
+`callers` and `callees` select definitions by exact qualified name first and exact short name
+second. A query that matches multiple definitions, including overloads, fails with a candidate list
+instead of choosing arbitrarily. Signature- and source-location-based disambiguation is not yet
+available.

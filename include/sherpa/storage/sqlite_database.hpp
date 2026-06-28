@@ -1,9 +1,11 @@
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <vector>
 
+#include "sherpa/domain/call_query.hpp"
 #include "sherpa/domain/indexed_file.hpp"
 #include "sherpa/domain/relationship.hpp"
 
@@ -11,9 +13,20 @@ struct sqlite3;
 
 namespace sherpa {
 
+enum class DatabaseOpenMode {
+  kReadWriteCreate,
+  kReadOnly,
+};
+
+struct StoredQuerySymbol {
+  std::int64_t id{};
+  QuerySymbol symbol;
+};
+
 class SqliteDatabase {
  public:
-  explicit SqliteDatabase(const std::filesystem::path& path);
+  explicit SqliteDatabase(const std::filesystem::path& path,
+                          DatabaseOpenMode mode = DatabaseOpenMode::kReadWriteCreate);
   ~SqliteDatabase();
 
   SqliteDatabase(const SqliteDatabase&) = delete;
@@ -22,9 +35,15 @@ class SqliteDatabase {
   SqliteDatabase& operator=(SqliteDatabase&&) = delete;
 
   void initialize_schema();
+  void validate_schema() const;
   void replace_index(const std::filesystem::path& repository_path,
                      const std::vector<IndexedFile>& files,
                      const std::vector<RelationshipRecord>& relationships);
+  [[nodiscard]] bool has_completed_index(const std::string& canonical_repository_path) const;
+  [[nodiscard]] std::vector<StoredQuerySymbol> find_definition_symbols(
+      const std::string& canonical_repository_path, const std::string& query) const;
+  [[nodiscard]] std::vector<CallQueryEntry> query_calls(std::int64_t symbol_id,
+                                                        CallQueryDirection direction) const;
 
  private:
   void execute(const std::string& sql);
