@@ -4,7 +4,10 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
+#include "sherpa/domain/indexed_file.hpp"
+#include "sherpa/parsing/tree_sitter_frontend.hpp"
 #include "sherpa/scanner/repository_scanner.hpp"
 #include "sherpa/storage/sqlite_database.hpp"
 #include "sherpa/util/fingerprint.hpp"
@@ -72,20 +75,51 @@ IndexResult IndexService::index(const IndexOptions& options) const {
   }
 
   const auto repository_path = std::filesystem::canonical(options.repository_path);
-  const auto database_path =
-      options.database_path.empty() ? default_database_path(repository_path) : options.database_path;
+  const auto database_path = options.database_path.empty() ? default_database_path(repository_path)
+                                                           : options.database_path;
 
   RepositoryScanner scanner;
   auto scan_result = scanner.scan(repository_path);
 
+  TreeSitterFrontend frontend;
+  std::vector<IndexedFile> indexed_files;
+  indexed_files.reserve(scan_result.files.size());
+  std::size_t symbol_count = 0;
+  std::size_t include_count = 0;
+  std::size_t diagnostic_count = 0;
+  for (auto& file : scan_result.files) {
+    FileAnalysis analysis;
+    try {
+      analysis = frontend.analyze(file);
+    } catch (const std::exception& error) {
+      analysis.status = AnalysisStatus::kFailed;
+      analysis.diagnostics.push_back(DiagnosticRecord{
+          .severity = DiagnosticSeverity::kError,
+          .code = "analysis-failed",
+          .message = error.what(),
+          .range = {},
+      });
+    }
+    symbol_count += analysis.symbols.size();
+    include_count += analysis.includes.size();
+    diagnostic_count += analysis.diagnostics.size();
+    indexed_files.push_back(IndexedFile{
+        .file = std::move(file),
+        .analysis = std::move(analysis),
+    });
+  }
+
   SqliteDatabase database(database_path);
   database.initialize_schema();
-  database.replace_file_index(repository_path, scan_result.files);
+  database.replace_index(repository_path, indexed_files);
 
   return IndexResult{
       .repository_path = repository_path,
       .database_path = std::filesystem::absolute(database_path),
-      .indexed_files = scan_result.files.size(),
+      .indexed_files = indexed_files.size(),
+      .extracted_symbols = symbol_count,
+      .extracted_includes = include_count,
+      .diagnostics = diagnostic_count,
       .warnings = std::move(scan_result.warnings),
   };
 }

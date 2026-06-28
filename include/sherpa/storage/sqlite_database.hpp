@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include "sherpa/domain/file_record.hpp"
+#include "sherpa/domain/indexed_file.hpp"
 
 struct sqlite3;
 
@@ -21,8 +21,8 @@ class SqliteDatabase {
   SqliteDatabase& operator=(SqliteDatabase&&) = delete;
 
   void initialize_schema();
-  void replace_file_index(const std::filesystem::path& repository_path,
-                          const std::vector<FileRecord>& files);
+  void replace_index(const std::filesystem::path& repository_path,
+                     const std::vector<IndexedFile>& files);
 
  private:
   void execute(const std::string& sql);

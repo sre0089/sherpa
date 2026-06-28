@@ -16,6 +16,9 @@ struct IndexResult {
   std::filesystem::path repository_path;
   std::filesystem::path database_path;
   std::size_t indexed_files{};
+  std::size_t extracted_symbols{};
+  std::size_t extracted_includes{};
+  std::size_t diagnostics{};
   std::vector<std::string> warnings;
 };
 

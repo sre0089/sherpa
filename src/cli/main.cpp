@@ -1,5 +1,4 @@
 #include <CLI/CLI.hpp>
-
 #include <filesystem>
 #include <iostream>
 #include <stdexcept>
@@ -49,6 +48,9 @@ int main(int argc, char** argv) {
       });
 
       std::cout << "Indexed " << result.indexed_files << " C/C++ files\n"
+                << "Symbols: " << result.extracted_symbols << '\n'
+                << "Includes: " << result.extracted_includes << '\n'
+                << "Diagnostics: " << result.diagnostics << '\n'
                 << "Repository: " << result.repository_path.generic_string() << '\n'
                 << "Database: " << result.database_path.generic_string() << '\n';
       for (const auto& warning : result.warnings) {

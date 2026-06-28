@@ -3,5 +3,7 @@
 namespace sherpa {
 
 inline constexpr const char* kInitialSchema = R"SHERPA_SQL(@SHERPA_SCHEMA_SQL@)SHERPA_SQL";
+inline constexpr const char* kSyntaxSchemaMigration =
+    R"SHERPA_SQL(@SHERPA_SYNTAX_SCHEMA_SQL@)SHERPA_SQL";
 
 }  // namespace sherpa
