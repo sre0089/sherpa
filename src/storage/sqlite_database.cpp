@@ -3,8 +3,11 @@
 #include <sqlite3.h>
 
 #include <cstdint>
+#include <map>
+#include <optional>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 
 #include "sherpa/storage/schema_sql.hpp"
 
@@ -60,6 +63,36 @@ std::int64_t repository_id(sqlite3* database, const std::string& canonical_path)
   return sqlite3_column_int64(statement.get(), 0);
 }
 
+using SymbolDatabaseKey = std::tuple<std::string, std::string, SymbolRole, std::uint32_t>;
+
+SymbolDatabaseKey symbol_key(const SymbolReference& reference) {
+  return {reference.file_path, reference.qualified_name, reference.role, reference.start_byte};
+}
+
+std::int64_t require_file_id(const std::map<std::string, std::int64_t>& file_ids,
+                             const std::string& path) {
+  const auto found = file_ids.find(path);
+  if (found == file_ids.end()) {
+    throw std::runtime_error("relationship references unknown file: " + path);
+  }
+  return found->second;
+}
+
+std::int64_t require_symbol_id(const std::map<SymbolDatabaseKey, std::int64_t>& symbol_ids,
+                               const SymbolReference& reference) {
+  const auto found = symbol_ids.find(symbol_key(reference));
+  if (found == symbol_ids.end()) {
+    throw std::runtime_error("relationship references unknown symbol: " + reference.qualified_name);
+  }
+  return found->second;
+}
+
+void bind_optional_id(sqlite3* database, sqlite3_stmt* statement, int index,
+                      const std::optional<std::int64_t>& value) {
+  check(database,
+        value ? sqlite3_bind_int64(statement, index, *value) : sqlite3_bind_null(statement, index));
+}
+
 }  // namespace
 
 SqliteDatabase::SqliteDatabase(const std::filesystem::path& path) {
@@ -105,14 +138,14 @@ int SqliteDatabase::schema_version() const {
 
 void SqliteDatabase::initialize_schema() {
   execute(kInitialSchema);
-  constexpr int kSupportedSchemaVersion = 2;
+  constexpr int kSupportedSchemaVersion = 3;
   int version = schema_version();
-  if (version == 1) {
+
+  const auto migrate = [this](const char* sql) {
     execute("BEGIN IMMEDIATE");
     try {
-      execute(kSyntaxSchemaMigration);
+      execute(sql);
       execute("COMMIT");
-      version = schema_version();
     } catch (...) {
       try {
         execute("ROLLBACK");
@@ -120,6 +153,15 @@ void SqliteDatabase::initialize_schema() {
       }
       throw;
     }
+  };
+
+  if (version == 1) {
+    migrate(kSyntaxSchemaMigration);
+    version = schema_version();
+  }
+  if (version == 2) {
+    migrate(kRelationshipSchemaMigration);
+    version = schema_version();
   }
   if (version != kSupportedSchemaVersion) {
     throw std::runtime_error("unsupported database schema version: " + std::to_string(version));
@@ -127,7 +169,8 @@ void SqliteDatabase::initialize_schema() {
 }
 
 void SqliteDatabase::replace_index(const std::filesystem::path& repository_path,
-                                   const std::vector<IndexedFile>& files) {
+                                   const std::vector<IndexedFile>& files,
+                                   const std::vector<RelationshipRecord>& relationships) {
   execute("BEGIN IMMEDIATE");
   try {
     const auto canonical_path = std::filesystem::canonical(repository_path).generic_string();
@@ -171,6 +214,8 @@ void SqliteDatabase::replace_index(const std::filesystem::path& repository_path,
         "end_line, end_column, start_byte, end_byte) "
         "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)");
 
+    std::map<std::string, std::int64_t> file_ids;
+    std::map<SymbolDatabaseKey, std::int64_t> symbol_ids;
     for (const auto& indexed_file : files) {
       const auto& file = indexed_file.file;
       const auto& analysis = indexed_file.analysis;
@@ -189,6 +234,7 @@ void SqliteDatabase::replace_index(const std::filesystem::path& repository_path,
       bind_text(database_, insert_file.get(), 6, parse_status);
       check(database_, sqlite3_step(insert_file.get()));
       const auto file_id = sqlite3_last_insert_rowid(database_);
+      file_ids.emplace(file.relative_path, file_id);
 
       for (const auto& symbol : analysis.symbols) {
         sqlite3_reset(insert_symbol.get());
@@ -201,6 +247,9 @@ void SqliteDatabase::replace_index(const std::filesystem::path& repository_path,
         bind_text(database_, insert_symbol.get(), 6, symbol.signature);
         bind_range(database_, insert_symbol.get(), 7, symbol.range);
         check(database_, sqlite3_step(insert_symbol.get()));
+        symbol_ids.emplace(SymbolDatabaseKey(file.relative_path, symbol.qualified_name, symbol.role,
+                                             symbol.range.start_byte),
+                           sqlite3_last_insert_rowid(database_));
       }
 
       for (const auto& include : analysis.includes) {
@@ -222,6 +271,67 @@ void SqliteDatabase::replace_index(const std::filesystem::path& repository_path,
         bind_text(database_, insert_diagnostic.get(), 4, diagnostic.message);
         bind_range(database_, insert_diagnostic.get(), 5, diagnostic.range);
         check(database_, sqlite3_step(insert_diagnostic.get()));
+      }
+    }
+
+    Statement insert_relationship(
+        database_,
+        "INSERT INTO relationships(run_id, kind, source_file_id, source_symbol_id, "
+        "target_file_id, target_symbol_id, target_text, resolution, confidence, provenance, "
+        "candidate_count, start_line, start_column, end_line, end_column, start_byte, end_byte) "
+        "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)");
+    Statement insert_candidate(
+        database_,
+        "INSERT INTO relationship_candidates(relationship_id, target_file_id, target_symbol_id, "
+        "reason, rank) VALUES (?1, ?2, ?3, ?4, ?5)");
+
+    for (const auto& relationship : relationships) {
+      sqlite3_reset(insert_relationship.get());
+      sqlite3_clear_bindings(insert_relationship.get());
+      check(database_, sqlite3_bind_int64(insert_relationship.get(), 1, run_id));
+      bind_text(database_, insert_relationship.get(), 2, to_string(relationship.kind));
+      check(database_,
+            sqlite3_bind_int64(insert_relationship.get(), 3,
+                               require_file_id(file_ids, relationship.source_file_path)));
+      bind_optional_id(database_, insert_relationship.get(), 4,
+                       relationship.source_symbol ? std::optional<std::int64_t>{require_symbol_id(
+                                                        symbol_ids, *relationship.source_symbol)}
+                                                  : std::nullopt);
+      bind_optional_id(database_, insert_relationship.get(), 5,
+                       relationship.target_file_path
+                           ? std::optional<std::int64_t>{require_file_id(
+                                 file_ids, *relationship.target_file_path)}
+                           : std::nullopt);
+      bind_optional_id(database_, insert_relationship.get(), 6,
+                       relationship.target_symbol ? std::optional<std::int64_t>{require_symbol_id(
+                                                        symbol_ids, *relationship.target_symbol)}
+                                                  : std::nullopt);
+      bind_text(database_, insert_relationship.get(), 7, relationship.target_text);
+      bind_text(database_, insert_relationship.get(), 8, to_string(relationship.resolution));
+      bind_text(database_, insert_relationship.get(), 9, to_string(relationship.confidence));
+      bind_text(database_, insert_relationship.get(), 10, relationship.provenance);
+      check(database_,
+            sqlite3_bind_int64(insert_relationship.get(), 11,
+                               static_cast<sqlite3_int64>(relationship.candidates.size())));
+      bind_range(database_, insert_relationship.get(), 12, relationship.evidence);
+      check(database_, sqlite3_step(insert_relationship.get()));
+      const auto relationship_id = sqlite3_last_insert_rowid(database_);
+
+      for (const auto& candidate : relationship.candidates) {
+        sqlite3_reset(insert_candidate.get());
+        sqlite3_clear_bindings(insert_candidate.get());
+        check(database_, sqlite3_bind_int64(insert_candidate.get(), 1, relationship_id));
+        bind_optional_id(database_, insert_candidate.get(), 2,
+                         candidate.target_file_path ? std::optional<std::int64_t>{require_file_id(
+                                                          file_ids, *candidate.target_file_path)}
+                                                    : std::nullopt);
+        bind_optional_id(database_, insert_candidate.get(), 3,
+                         candidate.target_symbol ? std::optional<std::int64_t>{require_symbol_id(
+                                                       symbol_ids, *candidate.target_symbol)}
+                                                 : std::nullopt);
+        bind_text(database_, insert_candidate.get(), 4, candidate.reason);
+        check(database_, sqlite3_bind_int64(insert_candidate.get(), 5, candidate.rank));
+        check(database_, sqlite3_step(insert_candidate.get()));
       }
     }
 

@@ -48,4 +48,18 @@ const char* to_string(AnalysisStatus status) {
   throw std::logic_error("unknown analysis status");
 }
 
+const char* to_string(CallForm form) {
+  switch (form) {
+    case CallForm::kUnqualified:
+      return "unqualified";
+    case CallForm::kQualified:
+      return "qualified";
+    case CallForm::kMember:
+      return "member";
+    case CallForm::kIndirect:
+      return "indirect";
+  }
+  throw std::logic_error("unknown call form");
+}
+
 }  // namespace sherpa

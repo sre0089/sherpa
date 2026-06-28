@@ -51,6 +51,9 @@ int main(int argc, char** argv) {
                 << "Symbols: " << result.extracted_symbols << '\n'
                 << "Includes: " << result.extracted_includes << '\n'
                 << "Diagnostics: " << result.diagnostics << '\n'
+                << "Relationships: " << result.relationships << " ("
+                << result.resolved_relationships << " resolved, " << result.ambiguous_relationships
+                << " ambiguous, " << result.unresolved_relationships << " unresolved)\n"
                 << "Repository: " << result.repository_path.generic_string() << '\n'
                 << "Database: " << result.database_path.generic_string() << '\n';
       for (const auto& warning : result.warnings) {

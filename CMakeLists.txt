@@ -12,6 +12,15 @@ include(CTest)
 
 option(SHERPA_WARNINGS_AS_ERRORS "Treat Sherpa compiler warnings as errors" OFF)
 
+set_property(
+  DIRECTORY
+  APPEND
+  PROPERTY CMAKE_CONFIGURE_DEPENDS
+           "${CMAKE_CURRENT_SOURCE_DIR}/migrations/001_initial.sql"
+           "${CMAKE_CURRENT_SOURCE_DIR}/migrations/002_syntax.sql"
+           "${CMAKE_CURRENT_SOURCE_DIR}/migrations/003_relationships.sql"
+)
+
 find_package(CLI11 CONFIG REQUIRED)
 find_package(SQLite3 REQUIRED)
 find_package(unofficial-tree-sitter CONFIG REQUIRED)
@@ -45,6 +54,8 @@ endfunction()
 
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/migrations/001_initial.sql" SHERPA_SCHEMA_SQL)
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/migrations/002_syntax.sql" SHERPA_SYNTAX_SCHEMA_SQL)
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/migrations/003_relationships.sql"
+     SHERPA_RELATIONSHIP_SCHEMA_SQL)
 configure_file(
   "${CMAKE_CURRENT_SOURCE_DIR}/src/storage/schema_sql.hpp.in"
   "${CMAKE_CURRENT_BINARY_DIR}/generated/sherpa/storage/schema_sql.hpp"
@@ -58,7 +69,9 @@ configure_file(
 
 add_library(
   sherpa_core
+  src/analysis/relationship_resolver.cpp
   src/application/index_service.cpp
+  src/domain/relationship.cpp
   src/domain/syntax.cpp
   src/parsing/tree_sitter_frontend.cpp
   src/scanner/repository_scanner.cpp
@@ -100,6 +113,7 @@ if(BUILD_TESTING)
   add_executable(
     sherpa_tests
     tests/unit/fingerprint_test.cpp
+    tests/unit/relationship_resolver_test.cpp
     tests/unit/repository_scanner_test.cpp
     tests/unit/tree_sitter_frontend_test.cpp
     tests/integration/index_service_test.cpp

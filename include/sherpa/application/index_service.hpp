@@ -19,6 +19,10 @@ struct IndexResult {
   std::size_t extracted_symbols{};
   std::size_t extracted_includes{};
   std::size_t diagnostics{};
+  std::size_t relationships{};
+  std::size_t resolved_relationships{};
+  std::size_t ambiguous_relationships{};
+  std::size_t unresolved_relationships{};
   std::vector<std::string> warnings;
 };
 

@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "sherpa/domain/indexed_file.hpp"
+#include "sherpa/domain/relationship.hpp"
 
 struct sqlite3;
 
@@ -22,7 +23,8 @@ class SqliteDatabase {
 
   void initialize_schema();
   void replace_index(const std::filesystem::path& repository_path,
-                     const std::vector<IndexedFile>& files);
+                     const std::vector<IndexedFile>& files,
+                     const std::vector<RelationshipRecord>& relationships);
 
  private:
   void execute(const std::string& sql);

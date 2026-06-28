@@ -52,6 +52,23 @@ struct IncludeRecord {
   SourceRange range;
 };
 
+enum class CallForm {
+  kUnqualified,
+  kQualified,
+  kMember,
+  kIndirect,
+};
+
+struct CallSiteRecord {
+  std::string caller_qualified_name;
+  std::uint32_t caller_start_byte{};
+  std::string callee_text;
+  std::string callee_name;
+  CallForm form{};
+  std::uint32_t argument_count{};
+  SourceRange range;
+};
+
 struct DiagnosticRecord {
   DiagnosticSeverity severity{};
   std::string code;
@@ -63,6 +80,7 @@ struct FileAnalysis {
   AnalysisStatus status{AnalysisStatus::kParsed};
   std::vector<SymbolRecord> symbols;
   std::vector<IncludeRecord> includes;
+  std::vector<CallSiteRecord> calls;
   std::vector<DiagnosticRecord> diagnostics;
 };
 
@@ -70,5 +88,6 @@ struct FileAnalysis {
 [[nodiscard]] const char* to_string(SymbolRole role);
 [[nodiscard]] const char* to_string(DiagnosticSeverity severity);
 [[nodiscard]] const char* to_string(AnalysisStatus status);
+[[nodiscard]] const char* to_string(CallForm form);
 
 }  // namespace sherpa

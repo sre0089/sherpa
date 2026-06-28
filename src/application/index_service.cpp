@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "sherpa/analysis/relationship_resolver.hpp"
 #include "sherpa/domain/indexed_file.hpp"
 #include "sherpa/parsing/tree_sitter_frontend.hpp"
 #include "sherpa/scanner/repository_scanner.hpp"
@@ -109,9 +110,27 @@ IndexResult IndexService::index(const IndexOptions& options) const {
     });
   }
 
+  const auto relationships = RelationshipResolver{}.resolve(indexed_files);
+  std::size_t resolved_relationship_count = 0;
+  std::size_t ambiguous_relationship_count = 0;
+  std::size_t unresolved_relationship_count = 0;
+  for (const auto& relationship : relationships) {
+    switch (relationship.resolution) {
+      case ResolutionStatus::kResolved:
+        ++resolved_relationship_count;
+        break;
+      case ResolutionStatus::kAmbiguous:
+        ++ambiguous_relationship_count;
+        break;
+      case ResolutionStatus::kUnresolved:
+        ++unresolved_relationship_count;
+        break;
+    }
+  }
+
   SqliteDatabase database(database_path);
   database.initialize_schema();
-  database.replace_index(repository_path, indexed_files);
+  database.replace_index(repository_path, indexed_files, relationships);
 
   return IndexResult{
       .repository_path = repository_path,
@@ -120,6 +139,10 @@ IndexResult IndexService::index(const IndexOptions& options) const {
       .extracted_symbols = symbol_count,
       .extracted_includes = include_count,
       .diagnostics = diagnostic_count,
+      .relationships = relationships.size(),
+      .resolved_relationships = resolved_relationship_count,
+      .ambiguous_relationships = ambiguous_relationship_count,
+      .unresolved_relationships = unresolved_relationship_count,
       .warnings = std::move(scan_result.warnings),
   };
 }

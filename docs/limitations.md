@@ -10,7 +10,12 @@ Current results therefore do not resolve:
 - macro-expanded declarations;
 - compiler conditionals and build flags;
 - types, linkage, or virtual dispatch;
-- function calls or other graph relationships.
+- compiler-accurate function calls or include search paths.
 
 Malformed files are indexed when possible. Parser errors are retained as diagnostics alongside any
 symbols that could still be extracted.
+
+Call resolution currently prefers exact lexical or qualified names, then unique repository-wide
+names. Member calls without type information are low confidence. Overloads remain ambiguous when
+syntax alone cannot select one definition. Quoted includes use relative, repository-root, or unique
+suffix matching; system includes remain unresolved.

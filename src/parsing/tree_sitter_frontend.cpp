@@ -175,6 +175,19 @@ std::string unqualified_name(std::string_view name) {
   return std::string(separator == std::string_view::npos ? name : name.substr(separator + 2U));
 }
 
+std::string remove_template_arguments(std::string value) {
+  const auto template_start = value.find('<');
+  if (template_start != std::string::npos) {
+    value.erase(template_start);
+  }
+  return value;
+}
+
+bool is_cast_keyword(std::string_view name) {
+  return name == "static_cast" || name == "dynamic_cast" || name == "reinterpret_cast" ||
+         name == "const_cast";
+}
+
 std::string qualify_name(const std::vector<std::string>& scopes, std::string_view raw_name,
                          std::size_t class_scope_count) {
   if (raw_name.find("::") == std::string_view::npos) {
@@ -202,6 +215,11 @@ class Extractor {
   }
 
  private:
+  struct CallerContext {
+    std::string qualified_name;
+    std::uint32_t start_byte{};
+  };
+
   void visit(TSNode node) {
     record_diagnostic(node);
     const auto type = node_type(node);
@@ -215,11 +233,17 @@ class Extractor {
       return;
     }
     if (type == "function_definition") {
-      record_functions(node, SymbolRole::kDefinition);
+      const auto previous_caller = current_caller_;
+      current_caller_ = record_functions(node, SymbolRole::kDefinition);
+      visit_children(node);
+      current_caller_ = previous_caller;
+      return;
     } else if (type == "declaration" || type == "field_declaration") {
       record_functions(node, SymbolRole::kDeclaration);
     } else if (type == "preproc_include") {
       record_include(node);
+    } else if (type == "call_expression") {
+      record_call(node);
     }
 
     visit_children(node);
@@ -269,7 +293,7 @@ class Extractor {
     visit_children(node);
   }
 
-  void record_functions(TSNode container, SymbolRole role) {
+  std::optional<CallerContext> record_functions(TSNode container, SymbolRole role) {
     std::vector<TSNode> functions;
     if (role == SymbolRole::kDefinition) {
       if (const auto function = find_function_declarator(child_by_field(container, "declarator"))) {
@@ -288,30 +312,41 @@ class Extractor {
       }
     }
 
+    std::optional<CallerContext> caller;
     for (const TSNode function : functions) {
-      record_function(container, function, role);
+      if (const auto recorded = record_function(container, function, role)) {
+        if (role == SymbolRole::kDefinition && !caller) {
+          caller = recorded;
+        }
+      }
     }
+    return caller;
   }
 
-  void record_function(TSNode container, TSNode function, SymbolRole role) {
+  std::optional<CallerContext> record_function(TSNode container, TSNode function, SymbolRole role) {
     const auto name_node = declarator_name_node(function);
     if (!name_node) {
-      return;
+      return std::nullopt;
     }
 
     const std::string raw_name = normalize_space(node_text(*name_node, source_));
     if (raw_name.empty()) {
-      return;
+      return std::nullopt;
     }
     const bool method = has_class_scope(class_scopes_) || raw_name.find("::") != std::string::npos;
+    const std::string qualified_name = qualify_name(scopes_, raw_name, class_scopes_.size());
     analysis_.symbols.push_back(SymbolRecord{
         .kind = method ? SymbolKind::kMethod : SymbolKind::kFunction,
         .role = role,
         .name = unqualified_name(raw_name),
-        .qualified_name = qualify_name(scopes_, raw_name, class_scopes_.size()),
+        .qualified_name = qualified_name,
         .signature = normalize_space(node_text(function, source_)),
         .range = source_range(container),
     });
+    return CallerContext{
+        .qualified_name = qualified_name,
+        .start_byte = ts_node_start_byte(container),
+    };
   }
 
   void record_include(TSNode node) {
@@ -332,6 +367,63 @@ class Extractor {
           .range = source_range(node),
       });
     }
+  }
+
+  void record_call(TSNode node) {
+    if (!current_caller_) {
+      return;
+    }
+
+    const TSNode function = child_by_field(node, "function");
+    if (is_null(function)) {
+      return;
+    }
+
+    const auto function_type = node_type(function);
+    std::string callee_text = normalize_space(node_text(function, source_));
+    std::string callee_name;
+    CallForm form = CallForm::kIndirect;
+    if (function_type == "identifier") {
+      callee_name = callee_text;
+      form = CallForm::kUnqualified;
+    } else if (function_type == "qualified_identifier") {
+      callee_name = unqualified_name(callee_text);
+      form = CallForm::kQualified;
+    } else if (function_type == "field_expression") {
+      TSNode field = child_by_field(function, "field");
+      if (is_null(field)) {
+        field = child_by_field(function, "name");
+      }
+      callee_name = node_text(field, source_);
+      form = CallForm::kMember;
+    } else if (function_type == "template_function") {
+      callee_name = remove_template_arguments(callee_text);
+      form = CallForm::kUnqualified;
+    }
+
+    callee_name = remove_template_arguments(normalize_space(callee_name));
+    if (callee_name.empty()) {
+      callee_name = callee_text;
+    }
+    if (is_cast_keyword(callee_name)) {
+      return;
+    }
+
+    std::uint32_t argument_count = 0;
+    const TSNode arguments = child_by_field(node, "arguments");
+    if (!is_null(arguments)) {
+      argument_count = ts_node_named_child_count(arguments);
+    }
+
+    analysis_.calls.push_back(CallSiteRecord{
+        .caller_qualified_name = current_caller_->qualified_name,
+        .caller_start_byte = current_caller_->start_byte,
+        .callee_text = std::move(callee_text),
+        .callee_name = std::move(callee_name),
+        .form = form,
+        .argument_count = argument_count,
+        .range = source_range(node),
+    });
   }
 
   void record_diagnostic(TSNode node) {
@@ -369,12 +461,16 @@ class Extractor {
     std::ranges::sort(analysis_.diagnostics, {}, [](const DiagnosticRecord& diagnostic) {
       return std::tuple(diagnostic.range.start_byte, diagnostic.code);
     });
+    std::ranges::sort(analysis_.calls, {}, [](const CallSiteRecord& call) {
+      return std::tuple(call.range.start_byte, call.callee_text);
+    });
   }
 
   std::string_view source_;
   FileAnalysis analysis_;
   std::vector<std::string> scopes_;
   std::vector<std::string> class_scopes_;
+  std::optional<CallerContext> current_caller_;
 };
 
 const TSLanguage* language_for(std::string_view language) {

@@ -78,6 +78,12 @@ TEST_CASE("C++ frontend extracts out-of-class method definitions") {
   REQUIRE(find_symbol(analysis, "demo::helper", sherpa::SymbolRole::kDefinition) != nullptr);
   REQUIRE(find_symbol(analysis, "demo::(anonymous)::internal_scale",
                       sherpa::SymbolRole::kDefinition) != nullptr);
+  REQUIRE(analysis.calls.size() == 1);
+  CHECK(analysis.calls[0].caller_qualified_name == "demo::Widget::compute");
+  CHECK(analysis.calls[0].callee_text == "internal_scale");
+  CHECK(analysis.calls[0].callee_name == "internal_scale");
+  CHECK(analysis.calls[0].form == sherpa::CallForm::kUnqualified);
+  CHECK(analysis.calls[0].argument_count == 1);
 }
 
 TEST_CASE("C frontend extracts declarations definitions and system includes") {

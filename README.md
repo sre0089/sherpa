@@ -5,7 +5,8 @@ evidence-backed graph of files, symbols, and relationships.
 
 The project is under active development. Sherpa indexes C and C++ files and uses tree-sitter to
 extract functions, methods, classes, structs, include directives, source locations, and parser
-diagnostics into a local SQLite database.
+diagnostics into a local SQLite database. It also records evidence-backed `defines`, `calls`, and
+`includes` relationships while preserving ambiguous and unresolved references.
 
 ## Build
 
@@ -28,8 +29,10 @@ Use `--database <path>` to override the platform cache location.
 ## Status
 
 Sherpa currently discovers `.c`, `.cc`, `.cpp`, `.cxx`, `.h`, `.hh`, `.hpp`, `.hxx`, and `.inc`
-files. It performs syntax extraction only: overload resolution, call relationships, types,
-preprocessor expansion, and compiler-accurate semantics are not implemented yet.
+files. It performs syntax-based analysis only: overload resolution, types,
+preprocessor expansion, and compiler-accurate semantics are not implemented. Call and include
+resolution is intentionally conservative and every result carries status, confidence, and
+provenance.
 
 ## License
 

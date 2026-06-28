@@ -23,6 +23,10 @@ if(NOT output MATCHES "Includes: 2")
   message(FATAL_ERROR "unexpected include output: ${output}")
 endif()
 
+if(NOT output MATCHES "Relationships: 6 \\(6 resolved, 0 ambiguous, 0 unresolved\\)")
+  message(FATAL_ERROR "unexpected relationship output: ${output}")
+endif()
+
 if(NOT EXISTS "${DATABASE_PATH}")
   message(FATAL_ERROR "database was not created")
 endif()

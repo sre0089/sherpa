@@ -5,4 +5,6 @@ scanning, language analysis, graph algorithms, and SQLite persistence.
 
 The index application service scans files, dispatches them to the built-in tree-sitter C/C++
 frontend, and atomically persists files, syntax-level symbols, include directives, and diagnostics.
-Graph relationship resolution and queries remain intentionally deferred.
+The relationship resolver then creates file-to-symbol definitions, symbol-to-symbol calls, and
+file-to-file includes with evidence, confidence, provenance, and retained ambiguity. User-facing
+graph queries remain intentionally deferred.
