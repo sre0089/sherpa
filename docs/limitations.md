@@ -24,3 +24,8 @@ suffix matching; system includes remain unresolved.
 second. A query that matches multiple definitions, including overloads, fails with a candidate list
 instead of choosing arbitrarily. Signature- and source-location-based disambiguation is not yet
 available.
+
+Impact analysis reflects only relationships present in the current index. It cannot account for
+runtime dispatch, build-system configuration, macros, or unresolved external code. Resolved
+low-confidence edges are traversed but retain their confidence label. Ambiguous edges are reported
+as possible impact and are never traversed transitively.

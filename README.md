@@ -25,6 +25,8 @@ ctest --preset dev
 cd /path/to/repository
 sherpa callers qualified::symbol
 sherpa callees qualified::symbol
+sherpa impact src/file.cpp
+sherpa impact qualified::symbol
 ```
 
 Queries use the current directory as the repository by default. Use `--repo <path>` to query

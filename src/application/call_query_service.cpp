@@ -1,19 +1,11 @@
 #include "sherpa/application/call_query_service.hpp"
 
 #include <filesystem>
-#include <utility>
 
 #include "sherpa/application/index_service.hpp"
 #include "sherpa/storage/sqlite_database.hpp"
 
 namespace sherpa {
-
-AmbiguousSymbolError::AmbiguousSymbolError(std::string message, std::vector<QuerySymbol> candidates)
-    : std::runtime_error(std::move(message)), candidates_(std::move(candidates)) {}
-
-const std::vector<QuerySymbol>& AmbiguousSymbolError::candidates() const noexcept {
-  return candidates_;
-}
 
 CallQueryResult CallQueryService::query(const CallQueryOptions& options) const {
   if (options.symbol.empty()) {

@@ -5,8 +5,10 @@
 #include <string>
 
 #include "sherpa/application/call_query_service.hpp"
+#include "sherpa/application/impact_service.hpp"
 #include "sherpa/application/index_service.hpp"
 #include "sherpa/presentation/call_query_renderer.hpp"
+#include "sherpa/presentation/impact_renderer.hpp"
 #include "sherpa/version.hpp"
 
 namespace {
@@ -59,6 +61,42 @@ int run_query(sherpa::CallQueryDirection direction, const std::string& symbol,
   }
 }
 
+int run_impact(const std::string& target, const std::filesystem::path& repository_path,
+               const std::filesystem::path& database_path, const std::string& format) {
+  try {
+    const auto result = sherpa::ImpactService{}.analyze({
+        .target = target,
+        .repository_path = repository_path,
+        .database_path = database_path,
+    });
+    if (format == "json") {
+      sherpa::write_impact_json(std::cout, result);
+    } else {
+      sherpa::write_impact_text(std::cout, result);
+    }
+    return static_cast<int>(ExitCode::kSuccess);
+  } catch (const sherpa::IndexUnavailableError& error) {
+    std::cerr << "error: " << error.what() << '\n';
+    return static_cast<int>(ExitCode::kIndexUnavailable);
+  } catch (const sherpa::ImpactTargetNotFoundError& error) {
+    std::cerr << "error: " << error.what() << '\n';
+    return static_cast<int>(ExitCode::kSymbolNotFound);
+  } catch (const sherpa::AmbiguousSymbolError& error) {
+    std::cerr << "error: " << error.what() << '\n';
+    for (const auto& candidate : error.candidates()) {
+      std::cerr << "  " << candidate.qualified_name << " (" << candidate.signature << ") at "
+                << candidate.file_path << ':' << candidate.range.start_line << '\n';
+    }
+    return static_cast<int>(ExitCode::kAmbiguousSymbol);
+  } catch (const std::invalid_argument& error) {
+    std::cerr << "error: " << error.what() << '\n';
+    return static_cast<int>(ExitCode::kRepositoryUnavailable);
+  } catch (const std::exception& error) {
+    std::cerr << "error: impact analysis failed: " << error.what() << '\n';
+    return static_cast<int>(ExitCode::kInternalFailure);
+  }
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -94,6 +132,19 @@ int main(int argc, char** argv) {
   callees_command->add_option("--repo", callees_repository, "Indexed repository path");
   callees_command->add_option("--database", callees_database, "Explicit SQLite database path");
   callees_command->add_option("--format", callees_format, "Output format: text or json")
+      ->check(CLI::IsMember({"text", "json"}));
+
+  std::string impact_target;
+  std::filesystem::path impact_repository{"."};
+  std::filesystem::path impact_database;
+  std::string impact_format{"text"};
+  auto* impact_command =
+      app.add_subcommand("impact", "Find files and functions affected by a change");
+  impact_command->add_option("target", impact_target, "Repository-relative file or symbol name")
+      ->required();
+  impact_command->add_option("--repo", impact_repository, "Indexed repository path");
+  impact_command->add_option("--database", impact_database, "Explicit SQLite database path");
+  impact_command->add_option("--format", impact_format, "Output format: text or json")
       ->check(CLI::IsMember({"text", "json"}));
 
   try {
@@ -143,6 +194,9 @@ int main(int argc, char** argv) {
   if (*callees_command) {
     return run_query(sherpa::CallQueryDirection::kCallees, callees_symbol, callees_repository,
                      callees_database, callees_format);
+  }
+  if (*impact_command) {
+    return run_impact(impact_target, impact_repository, impact_database, impact_format);
   }
 
   return static_cast<int>(ExitCode::kUsage);

@@ -71,12 +71,16 @@ add_library(
   sherpa_core
   src/analysis/relationship_resolver.cpp
   src/application/call_query_service.cpp
+  src/application/impact_service.cpp
   src/application/index_service.cpp
+  src/application/query_errors.cpp
   src/domain/call_query.cpp
+  src/domain/impact.cpp
   src/domain/relationship.cpp
   src/domain/syntax.cpp
   src/parsing/tree_sitter_frontend.cpp
   src/presentation/call_query_renderer.cpp
+  src/presentation/impact_renderer.cpp
   src/scanner/repository_scanner.cpp
   src/storage/sqlite_database.cpp
   src/util/fingerprint.cpp
@@ -117,10 +121,12 @@ if(BUILD_TESTING)
     sherpa_tests
     tests/unit/call_query_renderer_test.cpp
     tests/unit/fingerprint_test.cpp
+    tests/unit/impact_renderer_test.cpp
     tests/unit/relationship_resolver_test.cpp
     tests/unit/repository_scanner_test.cpp
     tests/unit/tree_sitter_frontend_test.cpp
     tests/integration/call_query_service_test.cpp
+    tests/integration/impact_service_test.cpp
     tests/integration/index_service_test.cpp
   )
   target_compile_features(sherpa_tests PRIVATE cxx_std_20)
@@ -152,5 +158,14 @@ if(BUILD_TESTING)
       -DFIXTURE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/relationships
       -DDATABASE_PATH=${CMAKE_CURRENT_BINARY_DIR}/cli-query.sqlite
       -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/call_queries.cmake
+  )
+  add_test(
+    NAME cli_impact
+    COMMAND
+      "${CMAKE_COMMAND}"
+      -DSHERPA_EXECUTABLE=$<TARGET_FILE:sherpa>
+      -DFIXTURE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/impact
+      -DDATABASE_PATH=${CMAKE_CURRENT_BINARY_DIR}/cli-impact.sqlite
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/impact.cmake
   )
 endif()

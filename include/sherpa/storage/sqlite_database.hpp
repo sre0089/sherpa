@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "sherpa/domain/call_query.hpp"
+#include "sherpa/domain/graph_snapshot.hpp"
 #include "sherpa/domain/indexed_file.hpp"
 #include "sherpa/domain/relationship.hpp"
 
@@ -44,6 +45,7 @@ class SqliteDatabase {
       const std::string& canonical_repository_path, const std::string& query) const;
   [[nodiscard]] std::vector<CallQueryEntry> query_calls(std::int64_t symbol_id,
                                                         CallQueryDirection direction) const;
+  [[nodiscard]] GraphSnapshot load_graph(const std::string& canonical_repository_path) const;
 
  private:
   void execute(const std::string& sql);

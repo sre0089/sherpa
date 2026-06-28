@@ -351,6 +351,133 @@ std::vector<CallQueryEntry> SqliteDatabase::query_calls(std::int64_t symbol_id,
   return calls;
 }
 
+GraphSnapshot SqliteDatabase::load_graph(const std::string& canonical_repository_path) const {
+  GraphSnapshot graph;
+
+  {
+    Statement statement(database_,
+                        "SELECT file.id, file.relative_path "
+                        "FROM files file "
+                        "JOIN repositories repository ON repository.active_run_id = file.run_id "
+                        "WHERE repository.canonical_path = ?1 ORDER BY file.relative_path");
+    bind_text(database_, statement.get(), 1, canonical_repository_path);
+    while (sqlite3_step(statement.get()) == SQLITE_ROW) {
+      graph.files.push_back(GraphFileNode{
+          .id = sqlite3_column_int64(statement.get(), 0),
+          .path = column_text(statement.get(), 1),
+      });
+    }
+  }
+
+  {
+    Statement statement(
+        database_,
+        "SELECT symbol.id, file.id, symbol.kind, symbol.name, symbol.qualified_name, "
+        "symbol.signature, file.relative_path, symbol.start_line, symbol.start_column, "
+        "symbol.end_line, symbol.end_column, symbol.start_byte, symbol.end_byte "
+        "FROM symbols symbol "
+        "JOIN files file ON file.id = symbol.file_id "
+        "JOIN repositories repository ON repository.active_run_id = file.run_id "
+        "WHERE repository.canonical_path = ?1 AND symbol.role = 'definition' "
+        "ORDER BY symbol.qualified_name, file.relative_path, symbol.start_byte");
+    bind_text(database_, statement.get(), 1, canonical_repository_path);
+    while (sqlite3_step(statement.get()) == SQLITE_ROW) {
+      graph.symbols.push_back(GraphSymbolNode{
+          .id = sqlite3_column_int64(statement.get(), 0),
+          .file_id = sqlite3_column_int64(statement.get(), 1),
+          .symbol = column_symbol(statement.get(), 2),
+      });
+    }
+  }
+
+  std::map<std::int64_t, std::vector<GraphNodeId>> call_candidates;
+  std::map<std::int64_t, std::vector<GraphNodeId>> include_candidates;
+  {
+    Statement statement(
+        database_,
+        "SELECT candidate.relationship_id, relationship.kind, candidate.target_symbol_id, "
+        "candidate.target_file_id "
+        "FROM relationship_candidates candidate "
+        "JOIN relationships relationship ON relationship.id = candidate.relationship_id "
+        "JOIN repositories repository ON repository.active_run_id = relationship.run_id "
+        "WHERE repository.canonical_path = ?1 ORDER BY candidate.relationship_id, candidate.rank");
+    bind_text(database_, statement.get(), 1, canonical_repository_path);
+    while (sqlite3_step(statement.get()) == SQLITE_ROW) {
+      const auto relationship_id = sqlite3_column_int64(statement.get(), 0);
+      const auto kind = column_text(statement.get(), 1);
+      if (kind == "calls" && sqlite3_column_type(statement.get(), 2) != SQLITE_NULL) {
+        call_candidates[relationship_id].push_back(sqlite3_column_int64(statement.get(), 2));
+      } else if (kind == "includes" && sqlite3_column_type(statement.get(), 3) != SQLITE_NULL) {
+        include_candidates[relationship_id].push_back(sqlite3_column_int64(statement.get(), 3));
+      }
+    }
+  }
+
+  {
+    Statement statement(
+        database_,
+        "SELECT relationship.id, relationship.source_symbol_id, relationship.target_symbol_id, "
+        "relationship.target_text, relationship.resolution, relationship.confidence, "
+        "relationship.provenance, relationship.start_line, relationship.start_column, "
+        "relationship.end_line, relationship.end_column, relationship.start_byte, "
+        "relationship.end_byte "
+        "FROM relationships relationship "
+        "JOIN repositories repository ON repository.active_run_id = relationship.run_id "
+        "WHERE repository.canonical_path = ?1 AND relationship.kind = 'calls' "
+        "ORDER BY relationship.source_symbol_id, relationship.start_byte, relationship.id");
+    bind_text(database_, statement.get(), 1, canonical_repository_path);
+    while (sqlite3_step(statement.get()) == SQLITE_ROW) {
+      const auto relationship_id = sqlite3_column_int64(statement.get(), 0);
+      graph.calls.push_back(GraphCallEdge{
+          .source_symbol_id = sqlite3_column_int64(statement.get(), 1),
+          .target_symbol_id =
+              sqlite3_column_type(statement.get(), 2) == SQLITE_NULL
+                  ? std::nullopt
+                  : std::optional<GraphNodeId>{sqlite3_column_int64(statement.get(), 2)},
+          .target_text = column_text(statement.get(), 3),
+          .resolution = resolution_status(column_text(statement.get(), 4)),
+          .confidence = confidence(column_text(statement.get(), 5)),
+          .provenance = column_text(statement.get(), 6),
+          .evidence = column_range(statement.get(), 7),
+          .candidate_symbol_ids = call_candidates[relationship_id],
+      });
+    }
+  }
+
+  {
+    Statement statement(
+        database_,
+        "SELECT relationship.id, relationship.source_file_id, relationship.target_file_id, "
+        "relationship.target_text, relationship.resolution, relationship.confidence, "
+        "relationship.provenance, relationship.start_line, relationship.start_column, "
+        "relationship.end_line, relationship.end_column, relationship.start_byte, "
+        "relationship.end_byte "
+        "FROM relationships relationship "
+        "JOIN repositories repository ON repository.active_run_id = relationship.run_id "
+        "WHERE repository.canonical_path = ?1 AND relationship.kind = 'includes' "
+        "ORDER BY relationship.source_file_id, relationship.start_byte, relationship.id");
+    bind_text(database_, statement.get(), 1, canonical_repository_path);
+    while (sqlite3_step(statement.get()) == SQLITE_ROW) {
+      const auto relationship_id = sqlite3_column_int64(statement.get(), 0);
+      graph.includes.push_back(GraphIncludeEdge{
+          .source_file_id = sqlite3_column_int64(statement.get(), 1),
+          .target_file_id =
+              sqlite3_column_type(statement.get(), 2) == SQLITE_NULL
+                  ? std::nullopt
+                  : std::optional<GraphNodeId>{sqlite3_column_int64(statement.get(), 2)},
+          .target_text = column_text(statement.get(), 3),
+          .resolution = resolution_status(column_text(statement.get(), 4)),
+          .confidence = confidence(column_text(statement.get(), 5)),
+          .provenance = column_text(statement.get(), 6),
+          .evidence = column_range(statement.get(), 7),
+          .candidate_file_ids = include_candidates[relationship_id],
+      });
+    }
+  }
+
+  return graph;
+}
+
 void SqliteDatabase::replace_index(const std::filesystem::path& repository_path,
                                    const std::vector<IndexedFile>& files,
                                    const std::vector<RelationshipRecord>& relationships) {
