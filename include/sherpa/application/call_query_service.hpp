@@ -11,8 +11,8 @@ namespace sherpa {
 struct CallQueryOptions {
   CallQueryDirection direction{};
   std::string symbol;
-  std::string signature;
-  std::string file_path;
+  std::string signature{};
+  std::string file_path{};
   std::filesystem::path repository_path{"."};
   std::filesystem::path database_path;
 };
