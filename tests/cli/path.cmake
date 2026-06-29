@@ -37,10 +37,14 @@ if(NOT json_result EQUAL 0)
   message(FATAL_ERROR "sherpa path JSON failed (${json_result}): ${json_error}")
 endif()
 string(JSON query_kind GET "${path_json}" query)
+string(JSON schema_version GET "${path_json}" schema_version)
+string(JSON path_ok GET "${path_json}" ok)
 string(JSON path_status GET "${path_json}" status)
 string(JSON step_count LENGTH "${path_json}" steps)
 string(JSON step_resolution GET "${path_json}" steps 0 resolution)
-if(NOT query_kind STREQUAL "path" OR
+if(NOT schema_version EQUAL 1 OR
+   NOT path_ok OR
+   NOT query_kind STREQUAL "path" OR
    NOT path_status STREQUAL "possible" OR
    NOT step_count EQUAL 1 OR
    NOT step_resolution STREQUAL "ambiguous")

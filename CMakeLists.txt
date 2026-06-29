@@ -93,6 +93,7 @@ add_library(
   src/presentation/graph_export_renderer.cpp
   src/presentation/impact_renderer.cpp
   src/presentation/path_renderer.cpp
+  src/presentation/query_error_renderer.cpp
   src/presentation/symbol_query_renderer.cpp
   src/scanner/repository_scanner.cpp
   src/storage/sqlite_database.cpp
@@ -137,6 +138,7 @@ if(BUILD_TESTING)
     tests/unit/fingerprint_test.cpp
     tests/unit/impact_renderer_test.cpp
     tests/unit/path_renderer_test.cpp
+    tests/unit/query_error_renderer_test.cpp
     tests/unit/relationship_resolver_test.cpp
     tests/unit/repository_scanner_test.cpp
     tests/unit/symbol_query_renderer_test.cpp

@@ -8,7 +8,7 @@ namespace sherpa {
 
 void write_symbol_query_json(std::ostream& output, const SymbolQueryResult& result) {
   using namespace presentation_detail;
-  output << "{\"query\":\"symbol\",\"symbol\":";
+  output << "{\"schema_version\":1,\"ok\":true,\"query\":\"symbol\",\"symbol\":";
   write_symbol_json(output, result.symbol);
   output << ",\"callers\":{\"resolved\":" << result.callers.resolved
          << ",\"ambiguous\":" << result.callers.ambiguous

@@ -41,9 +41,15 @@ if(NOT callers_result EQUAL 0)
   message(FATAL_ERROR "sherpa callers failed (${callers_result}): ${callers_error}")
 endif()
 string(JSON query_kind GET "${callers_json}" query)
+string(JSON schema_version GET "${callers_json}" schema_version)
+string(JSON callers_ok GET "${callers_json}" ok)
 string(JSON call_count LENGTH "${callers_json}" calls)
 string(JSON caller_name GET "${callers_json}" calls 0 caller qualified_name)
-if(NOT query_kind STREQUAL "callers" OR NOT call_count EQUAL 1 OR NOT caller_name STREQUAL "run")
+if(NOT schema_version EQUAL 1 OR
+   NOT callers_ok OR
+   NOT query_kind STREQUAL "callers" OR
+   NOT call_count EQUAL 1 OR
+   NOT caller_name STREQUAL "run")
   message(FATAL_ERROR "unexpected callers JSON: ${callers_json}")
 endif()
 

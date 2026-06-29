@@ -22,6 +22,7 @@ TEST_CASE("symbol query JSON renderer includes query kind and counts") {
   std::ostringstream output;
   sherpa::write_symbol_query_json(output, result);
 
+  REQUIRE(output.str().find("\"schema_version\":1,\"ok\":true") != std::string::npos);
   REQUIRE(output.str().find("\"query\":\"symbol\"") != std::string::npos);
   REQUIRE(output.str().find("\"qualified_name\":\"quoted\\\"\\\\\\n\"") != std::string::npos);
   REQUIRE(output.str().find("\"callees\":{\"resolved\":3,\"ambiguous\":4,\"unresolved\":5}") !=

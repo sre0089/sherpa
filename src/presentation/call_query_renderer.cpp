@@ -9,7 +9,7 @@ namespace sherpa {
 
 void write_call_query_json(std::ostream& output, const CallQueryResult& result) {
   using namespace presentation_detail;
-  output << "{\"query\":";
+  output << "{\"schema_version\":1,\"ok\":true,\"query\":";
   write_json_string(output, to_string(result.direction));
   output << ",\"symbol\":";
   write_symbol_json(output, result.symbol);

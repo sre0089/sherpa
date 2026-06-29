@@ -37,9 +37,13 @@ if(NOT json_result EQUAL 0)
   message(FATAL_ERROR "sherpa impact JSON failed (${json_result}): ${json_error}")
 endif()
 string(JSON query_kind GET "${impact_json}" query)
+string(JSON schema_version GET "${impact_json}" schema_version)
+string(JSON impact_ok GET "${impact_json}" ok)
 string(JSON target_kind GET "${impact_json}" target kind)
 string(JSON confirmed_count LENGTH "${impact_json}" confirmed)
-if(NOT query_kind STREQUAL "impact" OR
+if(NOT schema_version EQUAL 1 OR
+   NOT impact_ok OR
+   NOT query_kind STREQUAL "impact" OR
    NOT target_kind STREQUAL "file" OR
    NOT confirmed_count EQUAL 3)
   message(FATAL_ERROR "unexpected impact JSON: ${impact_json}")

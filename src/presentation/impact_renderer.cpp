@@ -73,7 +73,7 @@ void write_records_text(std::ostream& output, const std::vector<ImpactRecord>& r
 }  // namespace
 
 void write_impact_json(std::ostream& output, const ImpactResult& result) {
-  output << "{\"query\":\"impact\",\"target\":";
+  output << "{\"schema_version\":1,\"ok\":true,\"query\":\"impact\",\"target\":";
   write_node_json(output, result.target);
   output << ",\"confirmed\":";
   write_records_json(output, result.confirmed);

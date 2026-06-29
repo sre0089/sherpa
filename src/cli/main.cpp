@@ -3,6 +3,8 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
+#include <vector>
 
 #include "graph_export_command.hpp"
 #include "sherpa/application/call_query_service.hpp"
@@ -15,6 +17,7 @@
 #include "sherpa/presentation/file_query_renderer.hpp"
 #include "sherpa/presentation/impact_renderer.hpp"
 #include "sherpa/presentation/path_renderer.hpp"
+#include "sherpa/presentation/query_error_renderer.hpp"
 #include "sherpa/presentation/symbol_query_renderer.hpp"
 #include "sherpa/version.hpp"
 
@@ -30,6 +33,35 @@ enum class ExitCode {
   kOutputUnavailable = 7,
   kInternalFailure = 10,
 };
+
+void write_query_error(const std::string& format, std::string_view code,
+                       std::string_view message,
+                       const std::vector<sherpa::QuerySymbol>& candidates = {}) {
+  if (format == "json") {
+    sherpa::write_query_error_json(std::cout, code, message, candidates);
+    return;
+  }
+
+  std::cerr << "error: " << message << '\n';
+  for (const auto& candidate : candidates) {
+    std::cerr << "  " << candidate.qualified_name << " (" << candidate.signature << ") at "
+              << candidate.file_path << ':' << candidate.range.start_line << '\n';
+  }
+}
+
+bool requests_json_output(int argc, char** argv) {
+  for (int index = 1; index < argc; ++index) {
+    const std::string_view argument{argv[index]};
+    if (argument == "--format=json") {
+      return true;
+    }
+    if (argument == "--format" && index + 1 < argc &&
+        std::string_view{argv[index + 1]} == "json") {
+      return true;
+    }
+  }
+  return false;
+}
 
 int run_query(sherpa::CallQueryDirection direction, const std::string& symbol,
               const std::filesystem::path& repository_path,
@@ -48,23 +80,20 @@ int run_query(sherpa::CallQueryDirection direction, const std::string& symbol,
     }
     return static_cast<int>(ExitCode::kSuccess);
   } catch (const sherpa::IndexUnavailableError& error) {
-    std::cerr << "error: " << error.what() << '\n';
+    write_query_error(format, "index_unavailable", error.what());
     return static_cast<int>(ExitCode::kIndexUnavailable);
   } catch (const sherpa::SymbolNotFoundError& error) {
-    std::cerr << "error: " << error.what() << '\n';
+    write_query_error(format, "not_found", error.what());
     return static_cast<int>(ExitCode::kSymbolNotFound);
   } catch (const sherpa::AmbiguousSymbolError& error) {
-    std::cerr << "error: " << error.what() << '\n';
-    for (const auto& candidate : error.candidates()) {
-      std::cerr << "  " << candidate.qualified_name << " (" << candidate.signature << ") at "
-                << candidate.file_path << ':' << candidate.range.start_line << '\n';
-    }
+    write_query_error(format, "ambiguous_symbol", error.what(), error.candidates());
     return static_cast<int>(ExitCode::kAmbiguousSymbol);
   } catch (const std::invalid_argument& error) {
-    std::cerr << "error: " << error.what() << '\n';
+    write_query_error(format, "repository_unavailable", error.what());
     return static_cast<int>(ExitCode::kRepositoryUnavailable);
   } catch (const std::exception& error) {
-    std::cerr << "error: query failed: " << error.what() << '\n';
+    write_query_error(format, "internal_failure",
+                      std::string{"query failed: "} + error.what());
     return static_cast<int>(ExitCode::kInternalFailure);
   }
 }
@@ -84,23 +113,20 @@ int run_symbol_query(const std::string& symbol, const std::filesystem::path& rep
     }
     return static_cast<int>(ExitCode::kSuccess);
   } catch (const sherpa::IndexUnavailableError& error) {
-    std::cerr << "error: " << error.what() << '\n';
+    write_query_error(format, "index_unavailable", error.what());
     return static_cast<int>(ExitCode::kIndexUnavailable);
   } catch (const sherpa::SymbolNotFoundError& error) {
-    std::cerr << "error: " << error.what() << '\n';
+    write_query_error(format, "not_found", error.what());
     return static_cast<int>(ExitCode::kSymbolNotFound);
   } catch (const sherpa::AmbiguousSymbolError& error) {
-    std::cerr << "error: " << error.what() << '\n';
-    for (const auto& candidate : error.candidates()) {
-      std::cerr << "  " << candidate.qualified_name << " (" << candidate.signature << ") at "
-                << candidate.file_path << ':' << candidate.range.start_line << '\n';
-    }
+    write_query_error(format, "ambiguous_symbol", error.what(), error.candidates());
     return static_cast<int>(ExitCode::kAmbiguousSymbol);
   } catch (const std::invalid_argument& error) {
-    std::cerr << "error: " << error.what() << '\n';
+    write_query_error(format, "repository_unavailable", error.what());
     return static_cast<int>(ExitCode::kRepositoryUnavailable);
   } catch (const std::exception& error) {
-    std::cerr << "error: symbol query failed: " << error.what() << '\n';
+    write_query_error(format, "internal_failure",
+                      std::string{"symbol query failed: "} + error.what());
     return static_cast<int>(ExitCode::kInternalFailure);
   }
 }
@@ -120,16 +146,17 @@ int run_file_query(const std::string& path, const std::filesystem::path& reposit
     }
     return static_cast<int>(ExitCode::kSuccess);
   } catch (const sherpa::IndexUnavailableError& error) {
-    std::cerr << "error: " << error.what() << '\n';
+    write_query_error(format, "index_unavailable", error.what());
     return static_cast<int>(ExitCode::kIndexUnavailable);
   } catch (const sherpa::FileNotFoundError& error) {
-    std::cerr << "error: " << error.what() << '\n';
+    write_query_error(format, "not_found", error.what());
     return static_cast<int>(ExitCode::kSymbolNotFound);
   } catch (const std::invalid_argument& error) {
-    std::cerr << "error: " << error.what() << '\n';
+    write_query_error(format, "repository_unavailable", error.what());
     return static_cast<int>(ExitCode::kRepositoryUnavailable);
   } catch (const std::exception& error) {
-    std::cerr << "error: file query failed: " << error.what() << '\n';
+    write_query_error(format, "internal_failure",
+                      std::string{"file query failed: "} + error.what());
     return static_cast<int>(ExitCode::kInternalFailure);
   }
 }
@@ -149,23 +176,20 @@ int run_impact(const std::string& target, const std::filesystem::path& repositor
     }
     return static_cast<int>(ExitCode::kSuccess);
   } catch (const sherpa::IndexUnavailableError& error) {
-    std::cerr << "error: " << error.what() << '\n';
+    write_query_error(format, "index_unavailable", error.what());
     return static_cast<int>(ExitCode::kIndexUnavailable);
   } catch (const sherpa::ImpactTargetNotFoundError& error) {
-    std::cerr << "error: " << error.what() << '\n';
+    write_query_error(format, "not_found", error.what());
     return static_cast<int>(ExitCode::kSymbolNotFound);
   } catch (const sherpa::AmbiguousSymbolError& error) {
-    std::cerr << "error: " << error.what() << '\n';
-    for (const auto& candidate : error.candidates()) {
-      std::cerr << "  " << candidate.qualified_name << " (" << candidate.signature << ") at "
-                << candidate.file_path << ':' << candidate.range.start_line << '\n';
-    }
+    write_query_error(format, "ambiguous_symbol", error.what(), error.candidates());
     return static_cast<int>(ExitCode::kAmbiguousSymbol);
   } catch (const std::invalid_argument& error) {
-    std::cerr << "error: " << error.what() << '\n';
+    write_query_error(format, "repository_unavailable", error.what());
     return static_cast<int>(ExitCode::kRepositoryUnavailable);
   } catch (const std::exception& error) {
-    std::cerr << "error: impact analysis failed: " << error.what() << '\n';
+    write_query_error(format, "internal_failure",
+                      std::string{"impact analysis failed: "} + error.what());
     return static_cast<int>(ExitCode::kInternalFailure);
   }
 }
@@ -187,23 +211,20 @@ int run_path(const std::string& source, const std::string& target,
     }
     return static_cast<int>(ExitCode::kSuccess);
   } catch (const sherpa::IndexUnavailableError& error) {
-    std::cerr << "error: " << error.what() << '\n';
+    write_query_error(format, "index_unavailable", error.what());
     return static_cast<int>(ExitCode::kIndexUnavailable);
   } catch (const sherpa::SymbolNotFoundError& error) {
-    std::cerr << "error: " << error.what() << '\n';
+    write_query_error(format, "not_found", error.what());
     return static_cast<int>(ExitCode::kSymbolNotFound);
   } catch (const sherpa::AmbiguousSymbolError& error) {
-    std::cerr << "error: " << error.what() << '\n';
-    for (const auto& candidate : error.candidates()) {
-      std::cerr << "  " << candidate.qualified_name << " (" << candidate.signature << ") at "
-                << candidate.file_path << ':' << candidate.range.start_line << '\n';
-    }
+    write_query_error(format, "ambiguous_symbol", error.what(), error.candidates());
     return static_cast<int>(ExitCode::kAmbiguousSymbol);
   } catch (const std::invalid_argument& error) {
-    std::cerr << "error: " << error.what() << '\n';
+    write_query_error(format, "repository_unavailable", error.what());
     return static_cast<int>(ExitCode::kRepositoryUnavailable);
   } catch (const std::exception& error) {
-    std::cerr << "error: path query failed: " << error.what() << '\n';
+    write_query_error(format, "internal_failure",
+                      std::string{"path query failed: "} + error.what());
     return static_cast<int>(ExitCode::kInternalFailure);
   }
 }
@@ -239,6 +260,7 @@ int run_export(const std::filesystem::path& output_path,
 }  // namespace
 
 int main(int argc, char** argv) {
+  const bool json_output_requested = requests_json_output(argc, argv);
   CLI::App app{"Evidence-backed codebase intelligence", "sherpa"};
   app.set_version_flag("--version", SHERPA_VERSION);
   app.require_subcommand(1);
@@ -362,9 +384,14 @@ int main(int argc, char** argv) {
   try {
     app.parse(argc, argv);
   } catch (const CLI::ParseError& error) {
-    const int reported_exit_code = app.exit(error);
-    if (reported_exit_code == static_cast<int>(CLI::ExitCodes::Success)) {
+    if (error.get_exit_code() == static_cast<int>(CLI::ExitCodes::Success)) {
+      static_cast<void>(app.exit(error));
       return static_cast<int>(ExitCode::kSuccess);
+    }
+    if (json_output_requested) {
+      sherpa::write_query_error_json(std::cout, "invalid_usage", error.what());
+    } else {
+      static_cast<void>(app.exit(error));
     }
     return static_cast<int>(ExitCode::kUsage);
   }

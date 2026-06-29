@@ -33,6 +33,7 @@ TEST_CASE("file query JSON renderer writes definitions and include edges") {
   std::ostringstream output;
   sherpa::write_file_query_json(output, result);
 
+  REQUIRE(output.str().find("\"schema_version\":1,\"ok\":true") != std::string::npos);
   REQUIRE(output.str().find("\"query\":\"file\"") != std::string::npos);
   REQUIRE(output.str().find("\"path\":\"src/main.cpp\"") != std::string::npos);
   REQUIRE(output.str().find("\"target_text\":\"quoted\\\"\\\\\\n\"") != std::string::npos);

@@ -8,7 +8,7 @@ namespace sherpa {
 
 void write_path_json(std::ostream& output, const PathResult& result) {
   using namespace presentation_detail;
-  output << "{\"query\":\"path\",\"source\":";
+  output << "{\"schema_version\":1,\"ok\":true,\"query\":\"path\",\"source\":";
   write_symbol_json(output, result.source);
   output << ",\"target\":";
   write_symbol_json(output, result.target);

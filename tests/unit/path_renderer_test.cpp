@@ -53,6 +53,7 @@ TEST_CASE("path JSON renderer preserves possible-step evidence") {
   std::ostringstream output;
   sherpa::write_path_json(output, result);
 
+  REQUIRE(output.str().find("\"schema_version\":1,\"ok\":true") != std::string::npos);
   REQUIRE(output.str().find("\"query\":\"path\"") != std::string::npos);
   REQUIRE(output.str().find("\"status\":\"possible\"") != std::string::npos);
   REQUIRE(output.str().find("\"resolution\":\"ambiguous\"") != std::string::npos);

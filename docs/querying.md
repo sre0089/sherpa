@@ -39,9 +39,10 @@ ambiguity error that lists candidates; Sherpa never chooses by row order.
 unresolved targets. `callers` reports relationships whose resolved target is the selected
 definition, plus ambiguous relationships that retain it as a candidate.
 
-Text is the default output. `--format json` emits a stable top-level object containing `query`,
-`symbol`, and `calls`. Each call includes its caller, optional resolved callee, original target
-text, resolution, confidence, provenance, source evidence, and ambiguity candidates.
+Text is the default output. `--format json` emits a versioned object with `schema_version`,
+`ok`, and query-specific result fields. JSON failures use the same envelope and stable error codes,
+so callers never need to parse human-readable diagnostics. See
+[Query JSON contract](query-json.md) for the complete compatibility and error contract.
 
 ## Impact analysis
 

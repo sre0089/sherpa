@@ -72,7 +72,7 @@ void write_include_section(std::ostream& output, const char* heading,
 
 void write_file_query_json(std::ostream& output, const FileQueryResult& result) {
   using namespace presentation_detail;
-  output << "{\"query\":\"file\",\"path\":";
+  output << "{\"schema_version\":1,\"ok\":true,\"query\":\"file\",\"path\":";
   write_json_string(output, result.path);
   output << ",\"definitions\":[";
   for (std::size_t index = 0; index < result.definitions.size(); ++index) {

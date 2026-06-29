@@ -35,6 +35,7 @@ TEST_CASE("impact JSON renderer emits stable empty collections") {
   std::ostringstream output;
   sherpa::write_impact_json(output, empty_impact());
 
+  REQUIRE(output.str().find("\"schema_version\":1,\"ok\":true") != std::string::npos);
   REQUIRE(output.str().find("\"query\":\"impact\"") != std::string::npos);
   REQUIRE(output.str().find("\"kind\":\"file\"") != std::string::npos);
   REQUIRE(output.str().find("\"confirmed\":[]") != std::string::npos);

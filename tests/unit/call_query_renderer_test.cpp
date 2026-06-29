@@ -22,6 +22,7 @@ TEST_CASE("call query JSON renderer escapes strings and represents empty results
   std::ostringstream output;
   sherpa::write_call_query_json(output, result);
 
+  REQUIRE(output.str().find("\"schema_version\":1,\"ok\":true") != std::string::npos);
   REQUIRE(output.str().find("\"query\":\"callees\"") != std::string::npos);
   REQUIRE(output.str().find("\"qualified_name\":\"quoted\\\"\\\\\\n\"") != std::string::npos);
   REQUIRE(output.str().find("\"calls\":[]") != std::string::npos);
