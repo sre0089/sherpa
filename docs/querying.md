@@ -8,6 +8,7 @@ sherpa callees namespace::function --repo /path/to/repository
 sherpa callers namespace::function --repo /path/to/repository
 sherpa impact src/component.cpp --repo /path/to/repository
 sherpa impact namespace::function --repo /path/to/repository
+sherpa path namespace::caller namespace::callee --repo /path/to/repository
 ```
 
 `--repo` defaults to the current directory. `--database` selects an explicit index instead of the
@@ -44,6 +45,22 @@ Ambiguous incoming calls and includes are shown under `possible`, but Sherpa doe
 through them. This prevents uncertain relationships from being presented as confirmed transitive
 impact. Resolved edges retain their confidence and provenance. Sherpa reports evidence and counts
 rather than assigning an arbitrary risk rating.
+
+## Dependency paths
+
+`path <source> <target>` finds a directed function-call path from the source definition to the
+target definition. Both endpoints use the standard exact symbol-selection rules.
+
+Sherpa first performs breadth-first search using only resolved calls. If a confirmed path exists,
+the shortest such path is returned even when a shorter ambiguous route also exists. Only when no
+confirmed path exists does Sherpa search resolved calls plus retained ambiguity candidates and
+label the result `possible`. Unresolved calls are excluded because they cannot be tied to a target
+node.
+
+Each step contains its source and target symbols, resolution, confidence, provenance, and source
+location. Cycles are safe. A source queried against itself is a confirmed zero-step path. A
+disconnected pair returns `not_found` with exit status 0 because absence of a path is a valid query
+result.
 
 Successful empty results exit with status 0. Errors use these statuses:
 

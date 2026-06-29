@@ -27,6 +27,7 @@ sherpa callers qualified::symbol
 sherpa callees qualified::symbol
 sherpa impact src/file.cpp
 sherpa impact qualified::symbol
+sherpa path caller::symbol callee::symbol
 ```
 
 Queries use the current directory as the repository by default. Use `--repo <path>` to query

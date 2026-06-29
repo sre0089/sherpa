@@ -17,3 +17,8 @@ deterministic breadth-first traversals in application memory. Symbol impact foll
 edges. File impact independently follows reverse include edges and seeds call traversal from
 definitions in the target file. Resolved edges are traversed; ambiguous edges are retained as
 unexpanded possible-impact boundaries.
+
+Path tracing reuses the same graph-loading and symbol-selection support. It searches the directed
+resolved call graph first, then searches resolved plus ambiguous candidate edges only when no
+confirmed path exists. Both searches use deterministic breadth-first traversal and reconstruct
+source evidence from predecessor edges.

@@ -7,8 +7,10 @@
 #include "sherpa/application/call_query_service.hpp"
 #include "sherpa/application/impact_service.hpp"
 #include "sherpa/application/index_service.hpp"
+#include "sherpa/application/path_service.hpp"
 #include "sherpa/presentation/call_query_renderer.hpp"
 #include "sherpa/presentation/impact_renderer.hpp"
+#include "sherpa/presentation/path_renderer.hpp"
 #include "sherpa/version.hpp"
 
 namespace {
@@ -97,6 +99,44 @@ int run_impact(const std::string& target, const std::filesystem::path& repositor
   }
 }
 
+int run_path(const std::string& source, const std::string& target,
+             const std::filesystem::path& repository_path,
+             const std::filesystem::path& database_path, const std::string& format) {
+  try {
+    const auto result = sherpa::PathService{}.find({
+        .source = source,
+        .target = target,
+        .repository_path = repository_path,
+        .database_path = database_path,
+    });
+    if (format == "json") {
+      sherpa::write_path_json(std::cout, result);
+    } else {
+      sherpa::write_path_text(std::cout, result);
+    }
+    return static_cast<int>(ExitCode::kSuccess);
+  } catch (const sherpa::IndexUnavailableError& error) {
+    std::cerr << "error: " << error.what() << '\n';
+    return static_cast<int>(ExitCode::kIndexUnavailable);
+  } catch (const sherpa::SymbolNotFoundError& error) {
+    std::cerr << "error: " << error.what() << '\n';
+    return static_cast<int>(ExitCode::kSymbolNotFound);
+  } catch (const sherpa::AmbiguousSymbolError& error) {
+    std::cerr << "error: " << error.what() << '\n';
+    for (const auto& candidate : error.candidates()) {
+      std::cerr << "  " << candidate.qualified_name << " (" << candidate.signature << ") at "
+                << candidate.file_path << ':' << candidate.range.start_line << '\n';
+    }
+    return static_cast<int>(ExitCode::kAmbiguousSymbol);
+  } catch (const std::invalid_argument& error) {
+    std::cerr << "error: " << error.what() << '\n';
+    return static_cast<int>(ExitCode::kRepositoryUnavailable);
+  } catch (const std::exception& error) {
+    std::cerr << "error: path query failed: " << error.what() << '\n';
+    return static_cast<int>(ExitCode::kInternalFailure);
+  }
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -145,6 +185,19 @@ int main(int argc, char** argv) {
   impact_command->add_option("--repo", impact_repository, "Indexed repository path");
   impact_command->add_option("--database", impact_database, "Explicit SQLite database path");
   impact_command->add_option("--format", impact_format, "Output format: text or json")
+      ->check(CLI::IsMember({"text", "json"}));
+
+  std::string path_source;
+  std::string path_target;
+  std::filesystem::path path_repository{"."};
+  std::filesystem::path path_database;
+  std::string path_format{"text"};
+  auto* path_command = app.add_subcommand("path", "Find a directed call path between symbols");
+  path_command->add_option("source", path_source, "Starting symbol")->required();
+  path_command->add_option("target", path_target, "Destination symbol")->required();
+  path_command->add_option("--repo", path_repository, "Indexed repository path");
+  path_command->add_option("--database", path_database, "Explicit SQLite database path");
+  path_command->add_option("--format", path_format, "Output format: text or json")
       ->check(CLI::IsMember({"text", "json"}));
 
   try {
@@ -197,6 +250,9 @@ int main(int argc, char** argv) {
   }
   if (*impact_command) {
     return run_impact(impact_target, impact_repository, impact_database, impact_format);
+  }
+  if (*path_command) {
+    return run_path(path_source, path_target, path_repository, path_database, path_format);
   }
 
   return static_cast<int>(ExitCode::kUsage);

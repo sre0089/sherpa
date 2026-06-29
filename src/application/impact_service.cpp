@@ -8,9 +8,8 @@
 #include <utility>
 #include <vector>
 
-#include "sherpa/application/index_service.hpp"
+#include "graph_query_support.hpp"
 #include "sherpa/domain/graph_snapshot.hpp"
-#include "sherpa/storage/sqlite_database.hpp"
 
 namespace sherpa {
 namespace {
@@ -235,36 +234,9 @@ ImpactResult ImpactService::analyze(const ImpactOptions& options) const {
   if (options.target.empty()) {
     throw std::invalid_argument("impact target is required");
   }
-  if (options.repository_path.empty()) {
-    throw std::invalid_argument("repository path is required");
-  }
-  if (!std::filesystem::exists(options.repository_path)) {
-    throw std::invalid_argument("repository path does not exist: " +
-                                options.repository_path.string());
-  }
-  if (!std::filesystem::is_directory(options.repository_path)) {
-    throw std::invalid_argument("repository path is not a directory: " +
-                                options.repository_path.string());
-  }
-
-  const auto repository_path = std::filesystem::canonical(options.repository_path);
-  const auto database_path = options.database_path.empty()
-                                 ? IndexService::default_database_path(repository_path)
-                                 : std::filesystem::absolute(options.database_path);
-  if (!std::filesystem::is_regular_file(database_path)) {
-    throw IndexUnavailableError("index not found for repository; run `sherpa index " +
-                                repository_path.generic_string() + "` first");
-  }
-
-  SqliteDatabase database(database_path, DatabaseOpenMode::kReadOnly);
-  database.validate_schema();
-  const auto canonical_repository_path = repository_path.generic_string();
-  if (!database.has_completed_index(canonical_repository_path)) {
-    throw IndexUnavailableError("database has no completed index for repository: " +
-                                canonical_repository_path);
-  }
-
-  const auto graph = database.load_graph(canonical_repository_path);
+  const auto loaded = load_query_graph(options.repository_path, options.database_path);
+  const auto& repository_path = loaded.repository_path;
+  const auto& graph = loaded.graph;
   const TraversalContext context(graph);
   const auto file_path = normalized_target_path(options.target, repository_path);
   const auto file = std::ranges::find(graph.files, file_path,
@@ -283,19 +255,7 @@ ImpactResult ImpactService::analyze(const ImpactOptions& options) const {
     }
     traverse_callers(context, definitions, result.confirmed, result.possible);
   } else {
-    std::vector<const GraphSymbolNode*> matches;
-    for (const auto& symbol : graph.symbols) {
-      if (symbol.symbol.qualified_name == options.target) {
-        matches.push_back(&symbol);
-      }
-    }
-    if (matches.empty()) {
-      for (const auto& symbol : graph.symbols) {
-        if (symbol.symbol.name == options.target) {
-          matches.push_back(&symbol);
-        }
-      }
-    }
+    const auto matches = find_query_symbols(graph, options.target);
     if (matches.empty()) {
       throw ImpactTargetNotFoundError("file or symbol not found: " + options.target);
     }

@@ -29,3 +29,8 @@ Impact analysis reflects only relationships present in the current index. It can
 runtime dispatch, build-system configuration, macros, or unresolved external code. Resolved
 low-confidence edges are traversed but retain their confidence label. Ambiguous edges are reported
 as possible impact and are never traversed transitively.
+
+`path` currently traces directed symbol-to-symbol call relationships only. It does not find paths
+between files, mix include and call edges, infer paths through unresolved calls, or enumerate every
+possible route. It returns one deterministic shortest path, with fully resolved paths preferred
+over paths containing ambiguity.

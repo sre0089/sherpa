@@ -21,3 +21,18 @@ int candidate() { return 2; }
 }  // namespace beta
 
 int maybe() { return candidate(); }
+
+namespace alpha {
+int endpoint() { return 1; }
+}  // namespace alpha
+
+namespace beta {
+int endpoint() { return 2; }
+}  // namespace beta
+
+int bridge() { return alpha::endpoint(); }
+
+int certainty() {
+  endpoint();
+  return bridge();
+}
