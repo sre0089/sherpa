@@ -132,20 +132,24 @@ PathResult PathService::find(const PathOptions& options) const {
   }
 
   const auto loaded = load_query_graph(options.repository_path, options.database_path);
-  const auto& source = select_query_symbol(
-      loaded.graph,
-      {.name = options.source,
-       .signature = options.source_signature,
-       .file_path = options.source_file_path},
-      loaded.repository_path, "source symbol not found: " + options.source,
-      "source symbol is ambiguous: " + options.source);
-  const auto& target = select_query_symbol(
-      loaded.graph,
-      {.name = options.target,
-       .signature = options.target_signature,
-       .file_path = options.target_file_path},
-      loaded.repository_path, "target symbol not found: " + options.target,
-      "target symbol is ambiguous: " + options.target);
+  const SymbolSelectionCriteria source_criteria{
+      .name = options.source,
+      .signature = options.source_signature,
+      .file_path = options.source_file_path,
+  };
+  const SymbolSelectionCriteria target_criteria{
+      .name = options.target,
+      .signature = options.target_signature,
+      .file_path = options.target_file_path,
+  };
+  const std::string source_not_found = "source symbol not found: " + options.source;
+  const std::string source_ambiguous = "source symbol is ambiguous: " + options.source;
+  const std::string target_not_found = "target symbol not found: " + options.target;
+  const std::string target_ambiguous = "target symbol is ambiguous: " + options.target;
+  const auto& source = select_query_symbol(loaded.graph, source_criteria, loaded.repository_path,
+                                           source_not_found, source_ambiguous);
+  const auto& target = select_query_symbol(loaded.graph, target_criteria, loaded.repository_path,
+                                           target_not_found, target_ambiguous);
 
   if (auto steps = shortest_path(loaded.graph, source.id, target.id, false)) {
     return PathResult{

@@ -236,14 +236,16 @@ ImpactResult ImpactService::analyze(const ImpactOptions& options) const {
     traverse_callers(context, definitions, result.confirmed, result.possible);
   } else {
     const GraphSymbolNode* symbol = nullptr;
+    const SymbolSelectionCriteria criteria{
+        .name = options.target,
+        .signature = options.signature,
+        .file_path = options.file_path,
+    };
+    const std::string not_found_message = "symbol not found: " + options.target;
+    const std::string ambiguous_message = "symbol is ambiguous: " + options.target;
     try {
-      symbol = &select_query_symbol(
-          graph,
-          {.name = options.target,
-           .signature = options.signature,
-           .file_path = options.file_path},
-          repository_path, "symbol not found: " + options.target,
-          "symbol is ambiguous: " + options.target);
+      symbol = &select_query_symbol(graph, criteria, repository_path, not_found_message,
+                                    ambiguous_message);
     } catch (const SymbolNotFoundError&) {
       throw ImpactTargetNotFoundError("file or symbol not found: " + options.target);
     }
