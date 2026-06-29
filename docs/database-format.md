@@ -13,3 +13,7 @@ an index; indexing remains the only write path.
 
 The `content_fingerprint` column currently uses FNV-1a 64-bit for fast change detection. It is not
 a cryptographic integrity check.
+
+Sherpa's public interchange format is the graph export JSON document, not the SQLite schema. Tools
+that need a stable integration surface should consume the versioned export contract instead of
+reading database tables directly.

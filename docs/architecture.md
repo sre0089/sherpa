@@ -22,3 +22,9 @@ Path tracing reuses the same graph-loading and symbol-selection support. It sear
 resolved call graph first, then searches resolved plus ambiguous candidate edges only when no
 confirmed path exists. Both searches use deterministic breadth-first traversal and reconstruct
 source evidence from predecessor edges.
+
+Graph export reuses the same immutable query graph and transforms it into a versioned public JSON
+document. Export nodes and edges receive opaque, content-derived identifiers built from stable
+repository-relative facts rather than SQLite row ids or absolute paths. Output is sorted
+deterministically before rendering, and the CLI writes through a same-directory temporary file
+before renaming so callers never observe a partial export.

@@ -81,8 +81,8 @@ struct TraversalContext {
       if (call.resolution == ResolutionStatus::kResolved && call.target_symbol_id) {
         resolved_callers[*call.target_symbol_id].push_back(&call);
       } else if (call.resolution == ResolutionStatus::kAmbiguous) {
-        for (const auto candidate_id : call.candidate_symbol_ids) {
-          possible_callers[candidate_id].push_back(&call);
+        for (const auto& candidate : call.candidates) {
+          possible_callers[candidate.node_id].push_back(&call);
         }
       }
     }
@@ -90,8 +90,8 @@ struct TraversalContext {
       if (include.resolution == ResolutionStatus::kResolved && include.target_file_id) {
         resolved_includers[*include.target_file_id].push_back(&include);
       } else if (include.resolution == ResolutionStatus::kAmbiguous) {
-        for (const auto candidate_id : include.candidate_file_ids) {
-          possible_includers[candidate_id].push_back(&include);
+        for (const auto& candidate : include.candidates) {
+          possible_includers[candidate.node_id].push_back(&include);
         }
       }
     }

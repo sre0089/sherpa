@@ -63,9 +63,9 @@ std::optional<std::vector<PathStep>> shortest_path(const GraphSnapshot& graph,
           .relationship = &call,
       });
     } else if (include_ambiguous && call.resolution == ResolutionStatus::kAmbiguous) {
-      for (const auto candidate_id : call.candidate_symbol_ids) {
+      for (const auto& candidate : call.candidates) {
         adjacency[call.source_symbol_id].push_back(TraversableEdge{
-            .target_id = candidate_id,
+            .target_id = candidate.node_id,
             .relationship = &call,
         });
       }

@@ -4,6 +4,7 @@
 #include <stdexcept>
 #include <string>
 
+#include "graph_export_command.hpp"
 #include "sherpa/application/call_query_service.hpp"
 #include "sherpa/application/impact_service.hpp"
 #include "sherpa/application/index_service.hpp"
@@ -22,6 +23,7 @@ enum class ExitCode {
   kIndexUnavailable = 4,
   kSymbolNotFound = 5,
   kAmbiguousSymbol = 6,
+  kOutputUnavailable = 7,
   kInternalFailure = 10,
 };
 
@@ -137,6 +139,34 @@ int run_path(const std::string& source, const std::string& target,
   }
 }
 
+int run_export(const std::filesystem::path& output_path,
+               const std::filesystem::path& repository_path,
+               const std::filesystem::path& database_path, bool force) {
+  try {
+    const auto result = sherpa::cli::export_graph({
+        .output_path = output_path,
+        .repository_path = repository_path,
+        .database_path = database_path,
+        .force = force,
+    });
+    std::cout << "Exported " << result.nodes << " nodes and " << result.edges << " edges\n"
+              << "Output: " << result.output_path.generic_string() << '\n';
+    return static_cast<int>(ExitCode::kSuccess);
+  } catch (const sherpa::IndexUnavailableError& error) {
+    std::cerr << "error: " << error.what() << '\n';
+    return static_cast<int>(ExitCode::kIndexUnavailable);
+  } catch (const sherpa::cli::ExportOutputError& error) {
+    std::cerr << "error: " << error.what() << '\n';
+    return static_cast<int>(ExitCode::kOutputUnavailable);
+  } catch (const std::invalid_argument& error) {
+    std::cerr << "error: " << error.what() << '\n';
+    return static_cast<int>(ExitCode::kRepositoryUnavailable);
+  } catch (const std::exception& error) {
+    std::cerr << "error: graph export failed: " << error.what() << '\n';
+    return static_cast<int>(ExitCode::kInternalFailure);
+  }
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -200,6 +230,16 @@ int main(int argc, char** argv) {
   path_command->add_option("--format", path_format, "Output format: text or json")
       ->check(CLI::IsMember({"text", "json"}));
 
+  std::filesystem::path export_output;
+  std::filesystem::path export_repository{"."};
+  std::filesystem::path export_database;
+  bool export_force = false;
+  auto* export_command = app.add_subcommand("export", "Export the indexed graph as JSON");
+  export_command->add_option("output", export_output, "Output JSON file")->required();
+  export_command->add_option("--repo", export_repository, "Indexed repository path");
+  export_command->add_option("--database", export_database, "Explicit SQLite database path");
+  export_command->add_flag("--force", export_force, "Replace an existing regular file");
+
   try {
     app.parse(argc, argv);
   } catch (const CLI::ParseError& error) {
@@ -253,6 +293,9 @@ int main(int argc, char** argv) {
   }
   if (*path_command) {
     return run_path(path_source, path_target, path_repository, path_database, path_format);
+  }
+  if (*export_command) {
+    return run_export(export_output, export_repository, export_database, export_force);
   }
 
   return static_cast<int>(ExitCode::kUsage);

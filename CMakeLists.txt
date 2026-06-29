@@ -72,17 +72,20 @@ add_library(
   src/analysis/relationship_resolver.cpp
   src/application/call_query_service.cpp
   src/application/graph_query_support.cpp
+  src/application/graph_export_service.cpp
   src/application/impact_service.cpp
   src/application/index_service.cpp
   src/application/path_service.cpp
   src/application/query_errors.cpp
   src/domain/call_query.cpp
+  src/domain/graph_export.cpp
   src/domain/impact.cpp
   src/domain/path_query.cpp
   src/domain/relationship.cpp
   src/domain/syntax.cpp
   src/parsing/tree_sitter_frontend.cpp
   src/presentation/call_query_renderer.cpp
+  src/presentation/graph_export_renderer.cpp
   src/presentation/impact_renderer.cpp
   src/presentation/path_renderer.cpp
   src/scanner/repository_scanner.cpp
@@ -110,7 +113,7 @@ target_link_libraries(
 )
 sherpa_enable_warnings(sherpa_core)
 
-add_executable(sherpa src/cli/main.cpp)
+add_executable(sherpa src/cli/graph_export_command.cpp src/cli/main.cpp)
 target_compile_features(sherpa PRIVATE cxx_std_20)
 set_target_properties(sherpa PROPERTIES CXX_EXTENSIONS OFF)
 target_link_libraries(sherpa PRIVATE Sherpa::core CLI11::CLI11)
@@ -131,6 +134,7 @@ if(BUILD_TESTING)
     tests/unit/repository_scanner_test.cpp
     tests/unit/tree_sitter_frontend_test.cpp
     tests/integration/call_query_service_test.cpp
+    tests/integration/graph_export_service_test.cpp
     tests/integration/impact_service_test.cpp
     tests/integration/index_service_test.cpp
     tests/integration/path_service_test.cpp
@@ -182,5 +186,15 @@ if(BUILD_TESTING)
       -DFIXTURE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/impact
       -DDATABASE_PATH=${CMAKE_CURRENT_BINARY_DIR}/cli-path.sqlite
       -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/path.cmake
+  )
+  add_test(
+    NAME cli_export
+    COMMAND
+      "${CMAKE_COMMAND}"
+      -DSHERPA_EXECUTABLE=$<TARGET_FILE:sherpa>
+      -DFIXTURE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/impact
+      -DDATABASE_PATH=${CMAKE_CURRENT_BINARY_DIR}/cli-export.sqlite
+      -DOUTPUT_PATH=${CMAKE_CURRENT_BINARY_DIR}/graph-export.json
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/export.cmake
   )
 endif()

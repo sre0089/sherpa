@@ -9,6 +9,7 @@ sherpa callers namespace::function --repo /path/to/repository
 sherpa impact src/component.cpp --repo /path/to/repository
 sherpa impact namespace::function --repo /path/to/repository
 sherpa path namespace::caller namespace::callee --repo /path/to/repository
+sherpa export graph.json --repo /path/to/repository
 ```
 
 `--repo` defaults to the current directory. `--database` selects an explicit index instead of the
@@ -62,6 +63,20 @@ location. Cycles are safe. A source queried against itself is a confirmed zero-s
 disconnected pair returns `not_found` with exit status 0 because absence of a path is a valid query
 result.
 
+## Graph export
+
+`export <output>` writes the current repository graph as a versioned JSON document. The export is
+read-only with respect to the index. The output path is required and may be relative or absolute.
+
+The command refuses to overwrite an existing file unless `--force` is present. Export bytes are
+deterministic for an unchanged repository index: nodes and edges are ordered stably, file paths are
+repository-relative, and the logical repository root is recorded as `"."` rather than an absolute
+filesystem path. This avoids leaking machine-specific directories and keeps identical repositories
+byte-identical across machines.
+
+See [Graph export](graph-export.md) for the complete contract and
+[graph-export-schema-v1.json](graph-export-schema-v1.json) for the formal schema.
+
 Successful empty results exit with status 0. Errors use these statuses:
 
 | Status | Meaning |
@@ -71,4 +86,5 @@ Successful empty results exit with status 0. Errors use these statuses:
 | 4 | Index unavailable |
 | 5 | File or symbol not found |
 | 6 | Symbol ambiguous |
+| 7 | Output path unavailable |
 | 10 | Internal failure |

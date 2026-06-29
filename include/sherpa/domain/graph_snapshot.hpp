@@ -22,6 +22,12 @@ struct GraphSymbolNode {
   QuerySymbol symbol;
 };
 
+struct GraphCandidate {
+  GraphNodeId node_id{};
+  std::string reason;
+  std::uint32_t rank{};
+};
+
 struct GraphCallEdge {
   GraphNodeId source_symbol_id{};
   std::optional<GraphNodeId> target_symbol_id;
@@ -30,7 +36,7 @@ struct GraphCallEdge {
   Confidence confidence{};
   std::string provenance;
   SourceRange evidence;
-  std::vector<GraphNodeId> candidate_symbol_ids;
+  std::vector<GraphCandidate> candidates;
 };
 
 struct GraphIncludeEdge {
@@ -41,7 +47,7 @@ struct GraphIncludeEdge {
   Confidence confidence{};
   std::string provenance;
   SourceRange evidence;
-  std::vector<GraphNodeId> candidate_file_ids;
+  std::vector<GraphCandidate> candidates;
 };
 
 struct GraphSnapshot {

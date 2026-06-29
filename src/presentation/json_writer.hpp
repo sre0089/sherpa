@@ -48,7 +48,8 @@ inline void write_json_string(std::ostream& output, std::string_view value) {
 
 inline void write_range_json(std::ostream& output, const SourceRange& range) {
   output << "{\"start\":{\"line\":" << range.start_line << ",\"column\":" << range.start_column
-         << "},\"end\":{\"line\":" << range.end_line << ",\"column\":" << range.end_column << "}}";
+         << ",\"byte\":" << range.start_byte << "},\"end\":{\"line\":" << range.end_line
+         << ",\"column\":" << range.end_column << ",\"byte\":" << range.end_byte << "}}";
 }
 
 inline void write_symbol_json(std::ostream& output, const QuerySymbol& symbol) {

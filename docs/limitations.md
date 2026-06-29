@@ -34,3 +34,9 @@ as possible impact and are never traversed transitively.
 between files, mix include and call edges, infer paths through unresolved calls, or enumerate every
 possible route. It returns one deterministic shortest path, with fully resolved paths preferred
 over paths containing ambiguity.
+
+`export` currently emits file nodes, definition symbol nodes, and `defines`, `calls`, and
+`includes` edges only. It does not expose source text, diagnostics, declarations without
+definitions, or non-C/C++ language constructs. Export identifiers are stable for unchanged indexed
+content, but they are not intended to preserve identity across substantive symbol movement or future
+schema versions.

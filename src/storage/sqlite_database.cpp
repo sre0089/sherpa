@@ -390,13 +390,13 @@ GraphSnapshot SqliteDatabase::load_graph(const std::string& canonical_repository
     }
   }
 
-  std::map<std::int64_t, std::vector<GraphNodeId>> call_candidates;
-  std::map<std::int64_t, std::vector<GraphNodeId>> include_candidates;
+  std::map<std::int64_t, std::vector<GraphCandidate>> call_candidates;
+  std::map<std::int64_t, std::vector<GraphCandidate>> include_candidates;
   {
     Statement statement(
         database_,
         "SELECT candidate.relationship_id, relationship.kind, candidate.target_symbol_id, "
-        "candidate.target_file_id "
+        "candidate.target_file_id, candidate.reason, candidate.rank "
         "FROM relationship_candidates candidate "
         "JOIN relationships relationship ON relationship.id = candidate.relationship_id "
         "JOIN repositories repository ON repository.active_run_id = relationship.run_id "
@@ -406,9 +406,17 @@ GraphSnapshot SqliteDatabase::load_graph(const std::string& canonical_repository
       const auto relationship_id = sqlite3_column_int64(statement.get(), 0);
       const auto kind = column_text(statement.get(), 1);
       if (kind == "calls" && sqlite3_column_type(statement.get(), 2) != SQLITE_NULL) {
-        call_candidates[relationship_id].push_back(sqlite3_column_int64(statement.get(), 2));
+        call_candidates[relationship_id].push_back(GraphCandidate{
+            .node_id = sqlite3_column_int64(statement.get(), 2),
+            .reason = column_text(statement.get(), 4),
+            .rank = static_cast<std::uint32_t>(sqlite3_column_int64(statement.get(), 5)),
+        });
       } else if (kind == "includes" && sqlite3_column_type(statement.get(), 3) != SQLITE_NULL) {
-        include_candidates[relationship_id].push_back(sqlite3_column_int64(statement.get(), 3));
+        include_candidates[relationship_id].push_back(GraphCandidate{
+            .node_id = sqlite3_column_int64(statement.get(), 3),
+            .reason = column_text(statement.get(), 4),
+            .rank = static_cast<std::uint32_t>(sqlite3_column_int64(statement.get(), 5)),
+        });
       }
     }
   }
@@ -439,7 +447,7 @@ GraphSnapshot SqliteDatabase::load_graph(const std::string& canonical_repository
           .confidence = confidence(column_text(statement.get(), 5)),
           .provenance = column_text(statement.get(), 6),
           .evidence = column_range(statement.get(), 7),
-          .candidate_symbol_ids = call_candidates[relationship_id],
+          .candidates = call_candidates[relationship_id],
       });
     }
   }
@@ -470,7 +478,7 @@ GraphSnapshot SqliteDatabase::load_graph(const std::string& canonical_repository
           .confidence = confidence(column_text(statement.get(), 5)),
           .provenance = column_text(statement.get(), 6),
           .evidence = column_range(statement.get(), 7),
-          .candidate_file_ids = include_candidates[relationship_id],
+          .candidates = include_candidates[relationship_id],
       });
     }
   }
