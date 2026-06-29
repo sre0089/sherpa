@@ -5,6 +5,8 @@ Index a repository before querying it:
 ```sh
 sherpa index /path/to/repository
 sherpa query symbol namespace::function --repo /path/to/repository
+sherpa query symbol overloaded --signature 'overloaded(int value)' --repo /path/to/repository
+sherpa query callers helper --file src/helpers.cpp --repo /path/to/repository
 sherpa query file src/component.cpp --repo /path/to/repository
 sherpa query callees namespace::function --repo /path/to/repository
 sherpa query callers namespace::function --repo /path/to/repository
@@ -32,6 +34,16 @@ repository, and reports definitions in that file plus direct incoming and outgoi
 Sherpa first searches definition qualified names for an exact match. If none exist, it searches
 definition short names for an exact match. Zero matches is an error. Multiple matches is an
 ambiguity error that lists candidates; Sherpa never chooses by row order.
+
+Symbol-based commands accept `--signature <signature>` and `--file <path>` to narrow an ambiguous
+name. Signatures are exact matches against the displayed signature, including parameter names and
+qualifiers. Files may be repository-relative or absolute paths inside the repository. Both filters
+can be combined.
+
+`path` has independent `--source-signature`, `--source-file`, `--target-signature`, and
+`--target-file` options. Filters that match no definition return the normal not-found error.
+Remaining ambiguity candidates are ordered deterministically by qualified name, file, source
+position, and signature.
 
 ## Results
 

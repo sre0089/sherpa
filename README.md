@@ -24,6 +24,7 @@ ctest --preset dev
 ./build/dev/sherpa index /path/to/repository
 cd /path/to/repository
 sherpa query symbol qualified::symbol
+sherpa query symbol overloaded --signature 'overloaded(int value)'
 sherpa query file src/file.cpp
 sherpa query callers qualified::symbol
 sherpa query callees qualified::symbol

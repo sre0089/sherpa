@@ -37,6 +37,10 @@ std::filesystem::path relationship_fixture() {
   return std::filesystem::path(SHERPA_SOURCE_DIR) / "tests" / "fixtures" / "relationships";
 }
 
+std::filesystem::path ambiguity_fixture() {
+  return std::filesystem::path(SHERPA_SOURCE_DIR) / "tests" / "fixtures" / "query_ambiguity";
+}
+
 }  // namespace
 
 TEST_CASE("symbol query returns symbol metadata and call counts") {
@@ -79,4 +83,31 @@ TEST_CASE("symbol query reports missing and ambiguous symbols") {
                         .database_path = database_path,
                     }),
                     sherpa::AmbiguousSymbolError);
+}
+
+TEST_CASE("symbol query disambiguates overloads by signature and duplicates by file") {
+  QueryTemporaryDirectory temporary;
+  const auto relationship_database = temporary.path() / "relationships.sqlite";
+  const auto relationships = relationship_fixture();
+  static_cast<void>(sherpa::IndexService{}.index({relationships, relationship_database}));
+
+  const auto overload = sherpa::SymbolQueryService{}.query({
+      .symbol = "overloaded",
+      .signature = "overloaded(double value)",
+      .repository_path = relationships,
+      .database_path = relationship_database,
+  });
+  REQUIRE(overload.symbol.signature == "overloaded(double value)");
+
+  const auto ambiguity_database = temporary.path() / "ambiguity.sqlite";
+  const auto ambiguity = ambiguity_fixture();
+  static_cast<void>(sherpa::IndexService{}.index({ambiguity, ambiguity_database}));
+
+  const auto duplicate = sherpa::SymbolQueryService{}.query({
+      .symbol = "duplicate",
+      .file_path = (ambiguity / "src" / "second.cpp").string(),
+      .repository_path = ambiguity,
+      .database_path = ambiguity_database,
+  });
+  REQUIRE(duplicate.symbol.file_path == "src/second.cpp");
 }

@@ -11,6 +11,10 @@ namespace sherpa {
 struct PathOptions {
   std::string source;
   std::string target;
+  std::string source_signature;
+  std::string source_file_path;
+  std::string target_signature;
+  std::string target_file_path;
   std::filesystem::path repository_path{"."};
   std::filesystem::path database_path;
 };

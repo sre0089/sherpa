@@ -8,9 +8,11 @@ frontend, and atomically persists files, syntax-level symbols, include directive
 The relationship resolver then creates file-to-symbol definitions, symbol-to-symbol calls, and
 file-to-file includes with evidence, confidence, provenance, and retained ambiguity.
 
-The call query application service opens an existing index read-only, selects one definition using
-deterministic exact-name rules, and retrieves incoming or outgoing call relationships. The CLI
-renders the same query result as text or JSON; presentation logic does not issue SQL.
+All symbol-based application services use one shared selector over the immutable graph snapshot.
+It applies deterministic exact qualified-name or short-name rules, then optional exact signature
+and repository-relative file filters. The call query service retrieves incoming or outgoing call
+relationships for the selected graph node. The CLI renders the same query result as text or JSON;
+presentation logic does not issue SQL.
 
 Impact analysis loads the active repository graph into an immutable snapshot and performs
 deterministic breadth-first traversals in application memory. Symbol impact follows reverse call

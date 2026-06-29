@@ -19,11 +19,6 @@ enum class DatabaseOpenMode {
   kReadOnly,
 };
 
-struct StoredQuerySymbol {
-  std::int64_t id{};
-  QuerySymbol symbol;
-};
-
 class SqliteDatabase {
  public:
   explicit SqliteDatabase(const std::filesystem::path& path,
@@ -41,8 +36,6 @@ class SqliteDatabase {
                      const std::vector<IndexedFile>& files,
                      const std::vector<RelationshipRecord>& relationships);
   [[nodiscard]] bool has_completed_index(const std::string& canonical_repository_path) const;
-  [[nodiscard]] std::vector<StoredQuerySymbol> find_definition_symbols(
-      const std::string& canonical_repository_path, const std::string& query) const;
   [[nodiscard]] std::vector<CallQueryEntry> query_calls(std::int64_t symbol_id,
                                                         CallQueryDirection direction) const;
   [[nodiscard]] GraphSnapshot load_graph(const std::string& canonical_repository_path) const;

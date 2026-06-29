@@ -5,25 +5,6 @@
 #include "graph_query_support.hpp"
 
 namespace sherpa {
-namespace {
-
-const GraphSymbolNode& select_symbol(const GraphSnapshot& graph, const std::string& query) {
-  const auto matches = find_query_symbols(graph, query);
-  if (matches.empty()) {
-    throw SymbolNotFoundError("symbol not found: " + query);
-  }
-  if (matches.size() > 1) {
-    std::vector<QuerySymbol> candidates;
-    candidates.reserve(matches.size());
-    for (const auto* match : matches) {
-      candidates.push_back(match->symbol);
-    }
-    throw AmbiguousSymbolError("symbol is ambiguous: " + query, std::move(candidates));
-  }
-  return *matches.front();
-}
-
-}  // namespace
 
 SymbolQueryResult SymbolQueryService::query(const SymbolQueryOptions& options) const {
   if (options.symbol.empty()) {
@@ -31,7 +12,11 @@ SymbolQueryResult SymbolQueryService::query(const SymbolQueryOptions& options) c
   }
 
   const auto loaded = load_query_graph(options.repository_path, options.database_path);
-  const auto& symbol = select_symbol(loaded.graph, options.symbol);
+  const auto& symbol = select_query_symbol(
+      loaded.graph,
+      {.name = options.symbol, .signature = options.signature, .file_path = options.file_path},
+      loaded.repository_path, "symbol not found: " + options.symbol,
+      "symbol is ambiguous: " + options.symbol);
 
   SymbolQueryResult result{
       .symbol = symbol.symbol,

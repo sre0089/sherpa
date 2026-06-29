@@ -15,24 +15,6 @@
 namespace sherpa {
 namespace {
 
-const GraphSymbolNode& select_symbol(const GraphSnapshot& graph, const std::string& query,
-                                     const char* endpoint) {
-  const auto matches = find_query_symbols(graph, query);
-  if (matches.empty()) {
-    throw SymbolNotFoundError(std::string(endpoint) + " symbol not found: " + query);
-  }
-  if (matches.size() > 1) {
-    std::vector<QuerySymbol> candidates;
-    candidates.reserve(matches.size());
-    for (const auto* match : matches) {
-      candidates.push_back(match->symbol);
-    }
-    throw AmbiguousSymbolError(std::string(endpoint) + " symbol is ambiguous: " + query,
-                               std::move(candidates));
-  }
-  return *matches.front();
-}
-
 struct TraversableEdge {
   GraphNodeId target_id{};
   const GraphCallEdge* relationship{};
@@ -150,8 +132,20 @@ PathResult PathService::find(const PathOptions& options) const {
   }
 
   const auto loaded = load_query_graph(options.repository_path, options.database_path);
-  const auto& source = select_symbol(loaded.graph, options.source, "source");
-  const auto& target = select_symbol(loaded.graph, options.target, "target");
+  const auto& source = select_query_symbol(
+      loaded.graph,
+      {.name = options.source,
+       .signature = options.source_signature,
+       .file_path = options.source_file_path},
+      loaded.repository_path, "source symbol not found: " + options.source,
+      "source symbol is ambiguous: " + options.source);
+  const auto& target = select_query_symbol(
+      loaded.graph,
+      {.name = options.target,
+       .signature = options.target_signature,
+       .file_path = options.target_file_path},
+      loaded.repository_path, "target symbol not found: " + options.target,
+      "target symbol is ambiguous: " + options.target);
 
   if (auto steps = shortest_path(loaded.graph, source.id, target.id, false)) {
     return PathResult{

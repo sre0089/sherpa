@@ -235,21 +235,20 @@ ImpactResult ImpactService::analyze(const ImpactOptions& options) const {
     }
     traverse_callers(context, definitions, result.confirmed, result.possible);
   } else {
-    const auto matches = find_query_symbols(graph, options.target);
-    if (matches.empty()) {
+    const GraphSymbolNode* symbol = nullptr;
+    try {
+      symbol = &select_query_symbol(
+          graph,
+          {.name = options.target,
+           .signature = options.signature,
+           .file_path = options.file_path},
+          repository_path, "symbol not found: " + options.target,
+          "symbol is ambiguous: " + options.target);
+    } catch (const SymbolNotFoundError&) {
       throw ImpactTargetNotFoundError("file or symbol not found: " + options.target);
     }
-    if (matches.size() > 1) {
-      std::vector<QuerySymbol> candidates;
-      candidates.reserve(matches.size());
-      for (const auto* match : matches) {
-        candidates.push_back(match->symbol);
-      }
-      throw AmbiguousSymbolError("symbol is ambiguous: " + options.target, std::move(candidates));
-    }
-
-    result.target = impact_node(*matches.front());
-    traverse_callers(context, {matches.front()->id}, result.confirmed, result.possible);
+    result.target = impact_node(*symbol);
+    traverse_callers(context, {symbol->id}, result.confirmed, result.possible);
   }
 
   sort_records(result.confirmed);

@@ -132,3 +132,20 @@ TEST_CASE("impact service reports missing and ambiguous targets") {
   REQUIRE_THROWS_AS(analyze("unknown", fixture, database_path), sherpa::ImpactTargetNotFoundError);
   REQUIRE_THROWS_AS(analyze("candidate", fixture, database_path), sherpa::AmbiguousSymbolError);
 }
+
+TEST_CASE("impact service disambiguates an overloaded symbol by signature") {
+  ImpactTemporaryDirectory temporary;
+  const auto database_path = temporary.path() / "index.sqlite";
+  const auto fixture =
+      std::filesystem::path(SHERPA_SOURCE_DIR) / "tests" / "fixtures" / "relationships";
+  static_cast<void>(sherpa::IndexService{}.index({fixture, database_path}));
+
+  const auto result = sherpa::ImpactService{}.analyze({
+      .target = "overloaded",
+      .signature = "overloaded(double value)",
+      .repository_path = fixture,
+      .database_path = database_path,
+  });
+
+  REQUIRE(result.target.symbol->signature == "overloaded(double value)");
+}

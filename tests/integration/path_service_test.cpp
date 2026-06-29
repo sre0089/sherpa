@@ -124,3 +124,24 @@ TEST_CASE("path service reports missing and ambiguous endpoints") {
   REQUIRE_THROWS_AS(find_path("run", "candidate", fixture, database_path),
                     sherpa::AmbiguousSymbolError);
 }
+
+TEST_CASE("path service disambiguates both endpoints by signature") {
+  PathTemporaryDirectory temporary;
+  const auto database_path = temporary.path() / "index.sqlite";
+  const auto fixture =
+      std::filesystem::path(SHERPA_SOURCE_DIR) / "tests" / "fixtures" / "relationships";
+  static_cast<void>(sherpa::IndexService{}.index({fixture, database_path}));
+
+  const auto result = sherpa::PathService{}.find({
+      .source = "overloaded",
+      .target = "overloaded",
+      .source_signature = "overloaded(int value)",
+      .target_signature = "overloaded(int value)",
+      .repository_path = fixture,
+      .database_path = database_path,
+  });
+
+  REQUIRE(result.status == sherpa::PathStatus::kConfirmed);
+  REQUIRE(result.source.signature == "overloaded(int value)");
+  REQUIRE(result.steps.empty());
+}

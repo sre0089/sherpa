@@ -1,7 +1,10 @@
 #include "graph_query_support.hpp"
 
+#include <algorithm>
 #include <filesystem>
 #include <stdexcept>
+#include <tuple>
+#include <vector>
 
 #include "sherpa/application/index_service.hpp"
 #include "sherpa/application/query_errors.hpp"
@@ -45,22 +48,58 @@ LoadedQueryGraph load_query_graph(const std::filesystem::path& repository_path,
   };
 }
 
-std::vector<const GraphSymbolNode*> find_query_symbols(const GraphSnapshot& graph,
-                                                       const std::string& query) {
+const GraphSymbolNode& select_query_symbol(const GraphSnapshot& graph,
+                                           const SymbolSelectionCriteria& criteria,
+                                           const std::filesystem::path& repository_path,
+                                           std::string_view not_found_message,
+                                           std::string_view ambiguous_message) {
   std::vector<const GraphSymbolNode*> matches;
   for (const auto& symbol : graph.symbols) {
-    if (symbol.symbol.qualified_name == query) {
+    if (symbol.symbol.qualified_name == criteria.name) {
       matches.push_back(&symbol);
     }
   }
   if (matches.empty()) {
     for (const auto& symbol : graph.symbols) {
-      if (symbol.symbol.name == query) {
+      if (symbol.symbol.name == criteria.name) {
         matches.push_back(&symbol);
       }
     }
   }
-  return matches;
+
+  if (!criteria.signature.empty()) {
+    std::erase_if(matches, [&](const GraphSymbolNode* symbol) {
+      return symbol->symbol.signature != criteria.signature;
+    });
+  }
+  if (!criteria.file_path.empty()) {
+    const auto normalized_file =
+        normalize_repository_relative_path(criteria.file_path, repository_path);
+    std::erase_if(matches, [&](const GraphSymbolNode* symbol) {
+      return symbol->symbol.file_path != normalized_file;
+    });
+  }
+
+  std::ranges::sort(matches, {}, [](const GraphSymbolNode* symbol) {
+    return std::tuple(symbol->symbol.qualified_name, symbol->symbol.file_path,
+                      symbol->symbol.range.start_byte, symbol->symbol.signature);
+  });
+
+  if (matches.empty()) {
+    throw SymbolNotFoundError(std::string(not_found_message));
+  }
+  if (matches.size() > 1) {
+    std::vector<QuerySymbol> candidates;
+    candidates.reserve(matches.size());
+    for (const auto* match : matches) {
+      candidates.push_back(match->symbol);
+    }
+    throw AmbiguousSymbolError(std::string(ambiguous_message) +
+                                   "; add an exact signature or file filter to select one "
+                                   "definition",
+                               std::move(candidates));
+  }
+  return *matches.front();
 }
 
 std::string normalize_repository_relative_path(const std::string& target,

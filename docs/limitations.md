@@ -22,8 +22,9 @@ suffix matching; system includes remain unresolved.
 
 `callers` and `callees` select definitions by exact qualified name first and exact short name
 second. A query that matches multiple definitions, including overloads, fails with a candidate list
-instead of choosing arbitrarily. Signature- and source-location-based disambiguation is not yet
-available.
+instead of choosing arbitrarily. Exact displayed signatures and definition files can disambiguate
+queries. Sherpa does not currently normalize equivalent C++ type spellings, omit parameter names,
+or resolve an overload from argument types at a call site.
 
 Impact analysis reflects only relationships present in the current index. It cannot account for
 runtime dispatch, build-system configuration, macros, or unresolved external code. Resolved

@@ -241,42 +241,6 @@ bool SqliteDatabase::has_completed_index(const std::string& canonical_repository
   return sqlite3_step(statement.get()) == SQLITE_ROW;
 }
 
-std::vector<StoredQuerySymbol> SqliteDatabase::find_definition_symbols(
-    const std::string& canonical_repository_path, const std::string& query) const {
-  const auto find = [&](const char* name_column) {
-    const std::string sql =
-        "SELECT symbol.id, symbol.kind, symbol.name, symbol.qualified_name, symbol.signature, "
-        "file.relative_path, symbol.start_line, symbol.start_column, symbol.end_line, "
-        "symbol.end_column, symbol.start_byte, symbol.end_byte "
-        "FROM symbols symbol "
-        "JOIN files file ON file.id = symbol.file_id "
-        "JOIN index_runs run ON run.id = file.run_id "
-        "JOIN repositories repository ON repository.active_run_id = run.id "
-        "WHERE repository.canonical_path = ?1 AND symbol.role = 'definition' AND symbol." +
-        std::string(name_column) +
-        " = ?2 "
-        "ORDER BY symbol.qualified_name, file.relative_path, symbol.start_byte";
-    Statement statement(database_, sql.c_str());
-    bind_text(database_, statement.get(), 1, canonical_repository_path);
-    bind_text(database_, statement.get(), 2, query);
-
-    std::vector<StoredQuerySymbol> symbols;
-    while (sqlite3_step(statement.get()) == SQLITE_ROW) {
-      symbols.push_back(StoredQuerySymbol{
-          .id = sqlite3_column_int64(statement.get(), 0),
-          .symbol = column_symbol(statement.get(), 1),
-      });
-    }
-    return symbols;
-  };
-
-  auto symbols = find("qualified_name");
-  if (symbols.empty()) {
-    symbols = find("name");
-  }
-  return symbols;
-}
-
 std::vector<CallQueryEntry> SqliteDatabase::query_calls(std::int64_t symbol_id,
                                                         CallQueryDirection direction) const {
   const char* filter = direction == CallQueryDirection::kCallees

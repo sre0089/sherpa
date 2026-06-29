@@ -105,6 +105,21 @@ if(NOT ambiguous_result EQUAL 6 OR
 endif()
 
 execute_process(
+  COMMAND
+    "${SHERPA_EXECUTABLE}" query symbol overloaded --signature "overloaded(double value)"
+    --repo "${FIXTURE_DIR}" --database "${DATABASE_PATH}" --format json
+  RESULT_VARIABLE selected_result
+  OUTPUT_VARIABLE selected_json
+  ERROR_VARIABLE selected_error
+)
+string(JSON selected_signature GET "${selected_json}" symbol signature)
+if(NOT selected_result EQUAL 0 OR
+   NOT selected_signature STREQUAL "overloaded(double value)" OR
+   NOT selected_error STREQUAL "")
+  message(FATAL_ERROR "unexpected selected overload: ${selected_result}: ${selected_json}")
+endif()
+
+execute_process(
   COMMAND "${SHERPA_EXECUTABLE}" query symbol --format json
   RESULT_VARIABLE usage_result
   OUTPUT_VARIABLE usage_json

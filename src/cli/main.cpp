@@ -64,12 +64,15 @@ bool requests_json_output(int argc, char** argv) {
 }
 
 int run_query(sherpa::CallQueryDirection direction, const std::string& symbol,
+              const std::string& signature, const std::string& file_path,
               const std::filesystem::path& repository_path,
               const std::filesystem::path& database_path, const std::string& format) {
   try {
     const auto result = sherpa::CallQueryService{}.query({
         .direction = direction,
         .symbol = symbol,
+        .signature = signature,
+        .file_path = file_path,
         .repository_path = repository_path,
         .database_path = database_path,
     });
@@ -98,11 +101,15 @@ int run_query(sherpa::CallQueryDirection direction, const std::string& symbol,
   }
 }
 
-int run_symbol_query(const std::string& symbol, const std::filesystem::path& repository_path,
+int run_symbol_query(const std::string& symbol, const std::string& signature,
+                     const std::string& file_path,
+                     const std::filesystem::path& repository_path,
                      const std::filesystem::path& database_path, const std::string& format) {
   try {
     const auto result = sherpa::SymbolQueryService{}.query({
         .symbol = symbol,
+        .signature = signature,
+        .file_path = file_path,
         .repository_path = repository_path,
         .database_path = database_path,
     });
@@ -161,11 +168,14 @@ int run_file_query(const std::string& path, const std::filesystem::path& reposit
   }
 }
 
-int run_impact(const std::string& target, const std::filesystem::path& repository_path,
+int run_impact(const std::string& target, const std::string& signature,
+               const std::string& file_path, const std::filesystem::path& repository_path,
                const std::filesystem::path& database_path, const std::string& format) {
   try {
     const auto result = sherpa::ImpactService{}.analyze({
         .target = target,
+        .signature = signature,
+        .file_path = file_path,
         .repository_path = repository_path,
         .database_path = database_path,
     });
@@ -195,12 +205,18 @@ int run_impact(const std::string& target, const std::filesystem::path& repositor
 }
 
 int run_path(const std::string& source, const std::string& target,
+             const std::string& source_signature, const std::string& source_file_path,
+             const std::string& target_signature, const std::string& target_file_path,
              const std::filesystem::path& repository_path,
              const std::filesystem::path& database_path, const std::string& format) {
   try {
     const auto result = sherpa::PathService{}.find({
         .source = source,
         .target = target,
+        .source_signature = source_signature,
+        .source_file_path = source_file_path,
+        .target_signature = target_signature,
+        .target_file_path = target_file_path,
         .repository_path = repository_path,
         .database_path = database_path,
     });
@@ -275,12 +291,16 @@ int main(int argc, char** argv) {
   query_command->require_subcommand(1);
 
   std::string callers_symbol;
+  std::string callers_signature;
+  std::string callers_file;
   std::filesystem::path callers_repository{"."};
   std::filesystem::path callers_database;
   std::string callers_format{"text"};
   auto* callers_command = app.add_subcommand("callers", "Find functions that call a symbol");
   callers_command->add_option("symbol", callers_symbol, "Qualified or unqualified symbol name")
       ->required();
+  callers_command->add_option("--signature", callers_signature, "Exact displayed signature");
+  callers_command->add_option("--file", callers_file, "File containing the definition");
   callers_command->add_option("--repo", callers_repository, "Indexed repository path");
   callers_command->add_option("--database", callers_database, "Explicit SQLite database path");
   callers_command->add_option("--format", callers_format, "Output format: text or json")
@@ -290,18 +310,24 @@ int main(int argc, char** argv) {
   query_callers_command->add_option("symbol", callers_symbol,
                                     "Qualified or unqualified symbol name")
       ->required();
+  query_callers_command->add_option("--signature", callers_signature, "Exact displayed signature");
+  query_callers_command->add_option("--file", callers_file, "File containing the definition");
   query_callers_command->add_option("--repo", callers_repository, "Indexed repository path");
   query_callers_command->add_option("--database", callers_database, "Explicit SQLite database path");
   query_callers_command->add_option("--format", callers_format, "Output format: text or json")
       ->check(CLI::IsMember({"text", "json"}));
 
   std::string callees_symbol;
+  std::string callees_signature;
+  std::string callees_file;
   std::filesystem::path callees_repository{"."};
   std::filesystem::path callees_database;
   std::string callees_format{"text"};
   auto* callees_command = app.add_subcommand("callees", "Find functions called by a symbol");
   callees_command->add_option("symbol", callees_symbol, "Qualified or unqualified symbol name")
       ->required();
+  callees_command->add_option("--signature", callees_signature, "Exact displayed signature");
+  callees_command->add_option("--file", callees_file, "File containing the definition");
   callees_command->add_option("--repo", callees_repository, "Indexed repository path");
   callees_command->add_option("--database", callees_database, "Explicit SQLite database path");
   callees_command->add_option("--format", callees_format, "Output format: text or json")
@@ -311,12 +337,16 @@ int main(int argc, char** argv) {
   query_callees_command->add_option("symbol", callees_symbol,
                                     "Qualified or unqualified symbol name")
       ->required();
+  query_callees_command->add_option("--signature", callees_signature, "Exact displayed signature");
+  query_callees_command->add_option("--file", callees_file, "File containing the definition");
   query_callees_command->add_option("--repo", callees_repository, "Indexed repository path");
   query_callees_command->add_option("--database", callees_database, "Explicit SQLite database path");
   query_callees_command->add_option("--format", callees_format, "Output format: text or json")
       ->check(CLI::IsMember({"text", "json"}));
 
   std::string query_symbol_name;
+  std::string query_symbol_signature;
+  std::string query_symbol_file;
   std::filesystem::path query_symbol_repository{"."};
   std::filesystem::path query_symbol_database;
   std::string query_symbol_format{"text"};
@@ -325,6 +355,10 @@ int main(int argc, char** argv) {
   query_symbol_command->add_option("symbol", query_symbol_name,
                                    "Qualified or unqualified symbol name")
       ->required();
+  query_symbol_command->add_option("--signature", query_symbol_signature,
+                                   "Exact displayed signature");
+  query_symbol_command->add_option("--file", query_symbol_file,
+                                   "File containing the definition");
   query_symbol_command->add_option("--repo", query_symbol_repository, "Indexed repository path");
   query_symbol_command->add_option("--database", query_symbol_database,
                                    "Explicit SQLite database path");
@@ -346,6 +380,8 @@ int main(int argc, char** argv) {
       ->check(CLI::IsMember({"text", "json"}));
 
   std::string impact_target;
+  std::string impact_signature;
+  std::string impact_file;
   std::filesystem::path impact_repository{"."};
   std::filesystem::path impact_database;
   std::string impact_format{"text"};
@@ -353,6 +389,8 @@ int main(int argc, char** argv) {
       app.add_subcommand("impact", "Find files and functions affected by a change");
   impact_command->add_option("target", impact_target, "Repository-relative file or symbol name")
       ->required();
+  impact_command->add_option("--signature", impact_signature, "Exact displayed symbol signature");
+  impact_command->add_option("--file", impact_file, "File containing the symbol definition");
   impact_command->add_option("--repo", impact_repository, "Indexed repository path");
   impact_command->add_option("--database", impact_database, "Explicit SQLite database path");
   impact_command->add_option("--format", impact_format, "Output format: text or json")
@@ -360,12 +398,24 @@ int main(int argc, char** argv) {
 
   std::string path_source;
   std::string path_target;
+  std::string path_source_signature;
+  std::string path_source_file;
+  std::string path_target_signature;
+  std::string path_target_file;
   std::filesystem::path path_repository{"."};
   std::filesystem::path path_database;
   std::string path_format{"text"};
   auto* path_command = app.add_subcommand("path", "Find a directed call path between symbols");
   path_command->add_option("source", path_source, "Starting symbol")->required();
   path_command->add_option("target", path_target, "Destination symbol")->required();
+  path_command->add_option("--source-signature", path_source_signature,
+                           "Exact displayed source signature");
+  path_command->add_option("--source-file", path_source_file,
+                           "File containing the source definition");
+  path_command->add_option("--target-signature", path_target_signature,
+                           "Exact displayed target signature");
+  path_command->add_option("--target-file", path_target_file,
+                           "File containing the target definition");
   path_command->add_option("--repo", path_repository, "Indexed repository path");
   path_command->add_option("--database", path_database, "Explicit SQLite database path");
   path_command->add_option("--format", path_format, "Output format: text or json")
@@ -427,34 +477,37 @@ int main(int argc, char** argv) {
   }
 
   if (*callers_command) {
-    return run_query(sherpa::CallQueryDirection::kCallers, callers_symbol, callers_repository,
-                     callers_database, callers_format);
+    return run_query(sherpa::CallQueryDirection::kCallers, callers_symbol, callers_signature,
+                     callers_file, callers_repository, callers_database, callers_format);
   }
   if (*query_callers_command) {
-    return run_query(sherpa::CallQueryDirection::kCallers, callers_symbol, callers_repository,
-                     callers_database, callers_format);
+    return run_query(sherpa::CallQueryDirection::kCallers, callers_symbol, callers_signature,
+                     callers_file, callers_repository, callers_database, callers_format);
   }
   if (*callees_command) {
-    return run_query(sherpa::CallQueryDirection::kCallees, callees_symbol, callees_repository,
-                     callees_database, callees_format);
+    return run_query(sherpa::CallQueryDirection::kCallees, callees_symbol, callees_signature,
+                     callees_file, callees_repository, callees_database, callees_format);
   }
   if (*query_callees_command) {
-    return run_query(sherpa::CallQueryDirection::kCallees, callees_symbol, callees_repository,
-                     callees_database, callees_format);
+    return run_query(sherpa::CallQueryDirection::kCallees, callees_symbol, callees_signature,
+                     callees_file, callees_repository, callees_database, callees_format);
   }
   if (*query_symbol_command) {
-    return run_symbol_query(query_symbol_name, query_symbol_repository, query_symbol_database,
-                            query_symbol_format);
+    return run_symbol_query(query_symbol_name, query_symbol_signature, query_symbol_file,
+                            query_symbol_repository, query_symbol_database, query_symbol_format);
   }
   if (*query_file_command) {
     return run_file_query(query_file_path, query_file_repository, query_file_database,
                           query_file_format);
   }
   if (*impact_command) {
-    return run_impact(impact_target, impact_repository, impact_database, impact_format);
+    return run_impact(impact_target, impact_signature, impact_file, impact_repository,
+                      impact_database, impact_format);
   }
   if (*path_command) {
-    return run_path(path_source, path_target, path_repository, path_database, path_format);
+    return run_path(path_source, path_target, path_source_signature, path_source_file,
+                    path_target_signature, path_target_file, path_repository, path_database,
+                    path_format);
   }
   if (*export_command) {
     return run_export(export_output, export_repository, export_database, export_force);

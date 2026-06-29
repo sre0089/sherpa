@@ -129,10 +129,29 @@ TEST_CASE("call query service reports missing and ambiguous symbols") {
     }));
     FAIL("expected ambiguous symbol");
   } catch (const sherpa::AmbiguousSymbolError& error) {
+    REQUIRE(std::string(error.what()).find("exact signature or file filter") != std::string::npos);
     REQUIRE(error.candidates().size() == 2);
     REQUIRE(error.candidates()[0].signature == "overloaded(int value)");
     REQUIRE(error.candidates()[1].signature == "overloaded(double value)");
   }
+}
+
+TEST_CASE("call query service selects an overload by exact signature") {
+  QueryTemporaryDirectory temporary;
+  const auto database_path = temporary.path() / "index.sqlite";
+  const auto fixture = relationship_fixture();
+  static_cast<void>(sherpa::IndexService{}.index({fixture, database_path}));
+
+  const auto result = sherpa::CallQueryService{}.query({
+      .direction = sherpa::CallQueryDirection::kCallees,
+      .symbol = "overloaded",
+      .signature = "overloaded(int value)",
+      .repository_path = fixture,
+      .database_path = database_path,
+  });
+
+  REQUIRE(result.symbol.signature == "overloaded(int value)");
+  REQUIRE(result.calls.empty());
 }
 
 TEST_CASE("call query service does not create a missing index") {
