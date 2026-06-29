@@ -20,4 +20,7 @@ struct LoadedQueryGraph {
 [[nodiscard]] std::vector<const GraphSymbolNode*> find_query_symbols(const GraphSnapshot& graph,
                                                                      const std::string& query);
 
+[[nodiscard]] std::string normalize_repository_relative_path(
+    const std::string& target, const std::filesystem::path& repository_path);
+
 }  // namespace sherpa

@@ -4,8 +4,10 @@ Index a repository before querying it:
 
 ```sh
 sherpa index /path/to/repository
-sherpa callees namespace::function --repo /path/to/repository
-sherpa callers namespace::function --repo /path/to/repository
+sherpa query symbol namespace::function --repo /path/to/repository
+sherpa query file src/component.cpp --repo /path/to/repository
+sherpa query callees namespace::function --repo /path/to/repository
+sherpa query callers namespace::function --repo /path/to/repository
 sherpa impact src/component.cpp --repo /path/to/repository
 sherpa impact namespace::function --repo /path/to/repository
 sherpa path namespace::caller namespace::callee --repo /path/to/repository
@@ -14,6 +16,16 @@ sherpa export graph.json --repo /path/to/repository
 
 `--repo` defaults to the current directory. `--database` selects an explicit index instead of the
 platform cache. Queries are read-only and fail if the repository has no completed index.
+`sherpa query callers` and `sherpa query callees` are the preferred grouped forms; the top-level
+`sherpa callers` and `sherpa callees` aliases remain supported.
+
+## Query surface
+
+`query symbol <name>` resolves a definition using the standard symbol-selection rules and reports
+its metadata plus direct caller/callee counts by resolution status.
+
+`query file <path>` accepts an exact repository-relative path, or an absolute path inside the
+repository, and reports definitions in that file plus direct incoming and outgoing include edges.
 
 ## Symbol selection
 

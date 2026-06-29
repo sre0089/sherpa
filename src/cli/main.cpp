@@ -6,12 +6,16 @@
 
 #include "graph_export_command.hpp"
 #include "sherpa/application/call_query_service.hpp"
+#include "sherpa/application/file_query_service.hpp"
 #include "sherpa/application/impact_service.hpp"
 #include "sherpa/application/index_service.hpp"
 #include "sherpa/application/path_service.hpp"
+#include "sherpa/application/symbol_query_service.hpp"
 #include "sherpa/presentation/call_query_renderer.hpp"
+#include "sherpa/presentation/file_query_renderer.hpp"
 #include "sherpa/presentation/impact_renderer.hpp"
 #include "sherpa/presentation/path_renderer.hpp"
+#include "sherpa/presentation/symbol_query_renderer.hpp"
 #include "sherpa/version.hpp"
 
 namespace {
@@ -61,6 +65,71 @@ int run_query(sherpa::CallQueryDirection direction, const std::string& symbol,
     return static_cast<int>(ExitCode::kRepositoryUnavailable);
   } catch (const std::exception& error) {
     std::cerr << "error: query failed: " << error.what() << '\n';
+    return static_cast<int>(ExitCode::kInternalFailure);
+  }
+}
+
+int run_symbol_query(const std::string& symbol, const std::filesystem::path& repository_path,
+                     const std::filesystem::path& database_path, const std::string& format) {
+  try {
+    const auto result = sherpa::SymbolQueryService{}.query({
+        .symbol = symbol,
+        .repository_path = repository_path,
+        .database_path = database_path,
+    });
+    if (format == "json") {
+      sherpa::write_symbol_query_json(std::cout, result);
+    } else {
+      sherpa::write_symbol_query_text(std::cout, result);
+    }
+    return static_cast<int>(ExitCode::kSuccess);
+  } catch (const sherpa::IndexUnavailableError& error) {
+    std::cerr << "error: " << error.what() << '\n';
+    return static_cast<int>(ExitCode::kIndexUnavailable);
+  } catch (const sherpa::SymbolNotFoundError& error) {
+    std::cerr << "error: " << error.what() << '\n';
+    return static_cast<int>(ExitCode::kSymbolNotFound);
+  } catch (const sherpa::AmbiguousSymbolError& error) {
+    std::cerr << "error: " << error.what() << '\n';
+    for (const auto& candidate : error.candidates()) {
+      std::cerr << "  " << candidate.qualified_name << " (" << candidate.signature << ") at "
+                << candidate.file_path << ':' << candidate.range.start_line << '\n';
+    }
+    return static_cast<int>(ExitCode::kAmbiguousSymbol);
+  } catch (const std::invalid_argument& error) {
+    std::cerr << "error: " << error.what() << '\n';
+    return static_cast<int>(ExitCode::kRepositoryUnavailable);
+  } catch (const std::exception& error) {
+    std::cerr << "error: symbol query failed: " << error.what() << '\n';
+    return static_cast<int>(ExitCode::kInternalFailure);
+  }
+}
+
+int run_file_query(const std::string& path, const std::filesystem::path& repository_path,
+                   const std::filesystem::path& database_path, const std::string& format) {
+  try {
+    const auto result = sherpa::FileQueryService{}.query({
+        .path = path,
+        .repository_path = repository_path,
+        .database_path = database_path,
+    });
+    if (format == "json") {
+      sherpa::write_file_query_json(std::cout, result);
+    } else {
+      sherpa::write_file_query_text(std::cout, result);
+    }
+    return static_cast<int>(ExitCode::kSuccess);
+  } catch (const sherpa::IndexUnavailableError& error) {
+    std::cerr << "error: " << error.what() << '\n';
+    return static_cast<int>(ExitCode::kIndexUnavailable);
+  } catch (const sherpa::FileNotFoundError& error) {
+    std::cerr << "error: " << error.what() << '\n';
+    return static_cast<int>(ExitCode::kSymbolNotFound);
+  } catch (const std::invalid_argument& error) {
+    std::cerr << "error: " << error.what() << '\n';
+    return static_cast<int>(ExitCode::kRepositoryUnavailable);
+  } catch (const std::exception& error) {
+    std::cerr << "error: file query failed: " << error.what() << '\n';
     return static_cast<int>(ExitCode::kInternalFailure);
   }
 }
@@ -180,6 +249,9 @@ int main(int argc, char** argv) {
   index_command->add_option("repo", repository_path, "Repository path")->required();
   index_command->add_option("--database", database_path, "Explicit SQLite database path");
 
+  auto* query_command = app.add_subcommand("query", "Run read-only graph queries");
+  query_command->require_subcommand(1);
+
   std::string callers_symbol;
   std::filesystem::path callers_repository{"."};
   std::filesystem::path callers_database;
@@ -190,6 +262,15 @@ int main(int argc, char** argv) {
   callers_command->add_option("--repo", callers_repository, "Indexed repository path");
   callers_command->add_option("--database", callers_database, "Explicit SQLite database path");
   callers_command->add_option("--format", callers_format, "Output format: text or json")
+      ->check(CLI::IsMember({"text", "json"}));
+  auto* query_callers_command =
+      query_command->add_subcommand("callers", "Find functions that call a symbol");
+  query_callers_command->add_option("symbol", callers_symbol,
+                                    "Qualified or unqualified symbol name")
+      ->required();
+  query_callers_command->add_option("--repo", callers_repository, "Indexed repository path");
+  query_callers_command->add_option("--database", callers_database, "Explicit SQLite database path");
+  query_callers_command->add_option("--format", callers_format, "Output format: text or json")
       ->check(CLI::IsMember({"text", "json"}));
 
   std::string callees_symbol;
@@ -202,6 +283,44 @@ int main(int argc, char** argv) {
   callees_command->add_option("--repo", callees_repository, "Indexed repository path");
   callees_command->add_option("--database", callees_database, "Explicit SQLite database path");
   callees_command->add_option("--format", callees_format, "Output format: text or json")
+      ->check(CLI::IsMember({"text", "json"}));
+  auto* query_callees_command =
+      query_command->add_subcommand("callees", "Find functions called by a symbol");
+  query_callees_command->add_option("symbol", callees_symbol,
+                                    "Qualified or unqualified symbol name")
+      ->required();
+  query_callees_command->add_option("--repo", callees_repository, "Indexed repository path");
+  query_callees_command->add_option("--database", callees_database, "Explicit SQLite database path");
+  query_callees_command->add_option("--format", callees_format, "Output format: text or json")
+      ->check(CLI::IsMember({"text", "json"}));
+
+  std::string query_symbol_name;
+  std::filesystem::path query_symbol_repository{"."};
+  std::filesystem::path query_symbol_database;
+  std::string query_symbol_format{"text"};
+  auto* query_symbol_command =
+      query_command->add_subcommand("symbol", "Show symbol metadata and direct call counts");
+  query_symbol_command->add_option("symbol", query_symbol_name,
+                                   "Qualified or unqualified symbol name")
+      ->required();
+  query_symbol_command->add_option("--repo", query_symbol_repository, "Indexed repository path");
+  query_symbol_command->add_option("--database", query_symbol_database,
+                                   "Explicit SQLite database path");
+  query_symbol_command->add_option("--format", query_symbol_format, "Output format: text or json")
+      ->check(CLI::IsMember({"text", "json"}));
+
+  std::string query_file_path;
+  std::filesystem::path query_file_repository{"."};
+  std::filesystem::path query_file_database;
+  std::string query_file_format{"text"};
+  auto* query_file_command =
+      query_command->add_subcommand("file", "Show file definitions and direct include edges");
+  query_file_command->add_option("path", query_file_path, "Repository-relative file path")
+      ->required();
+  query_file_command->add_option("--repo", query_file_repository, "Indexed repository path");
+  query_file_command->add_option("--database", query_file_database,
+                                 "Explicit SQLite database path");
+  query_file_command->add_option("--format", query_file_format, "Output format: text or json")
       ->check(CLI::IsMember({"text", "json"}));
 
   std::string impact_target;
@@ -284,9 +403,25 @@ int main(int argc, char** argv) {
     return run_query(sherpa::CallQueryDirection::kCallers, callers_symbol, callers_repository,
                      callers_database, callers_format);
   }
+  if (*query_callers_command) {
+    return run_query(sherpa::CallQueryDirection::kCallers, callers_symbol, callers_repository,
+                     callers_database, callers_format);
+  }
   if (*callees_command) {
     return run_query(sherpa::CallQueryDirection::kCallees, callees_symbol, callees_repository,
                      callees_database, callees_format);
+  }
+  if (*query_callees_command) {
+    return run_query(sherpa::CallQueryDirection::kCallees, callees_symbol, callees_repository,
+                     callees_database, callees_format);
+  }
+  if (*query_symbol_command) {
+    return run_symbol_query(query_symbol_name, query_symbol_repository, query_symbol_database,
+                            query_symbol_format);
+  }
+  if (*query_file_command) {
+    return run_file_query(query_file_path, query_file_repository, query_file_database,
+                          query_file_format);
   }
   if (*impact_command) {
     return run_impact(impact_target, impact_repository, impact_database, impact_format);

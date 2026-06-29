@@ -41,26 +41,6 @@ void sort_records(std::vector<ImpactRecord>& records) {
   });
 }
 
-std::string normalized_target_path(const std::string& target,
-                                   const std::filesystem::path& repository_path) {
-  std::filesystem::path path(target);
-  if (path.is_absolute()) {
-    std::error_code error;
-    const auto canonical_path = std::filesystem::weakly_canonical(path, error);
-    if (!error) {
-      path = canonical_path;
-    }
-    path = path.lexically_normal().lexically_relative(repository_path);
-  } else {
-    path = path.lexically_normal();
-  }
-  auto normalized = path.generic_string();
-  if (normalized.starts_with("./")) {
-    normalized.erase(0, 2);
-  }
-  return normalized;
-}
-
 struct TraversalContext {
   const GraphSnapshot& graph;
   std::map<GraphNodeId, const GraphFileNode*> files;
@@ -238,7 +218,7 @@ ImpactResult ImpactService::analyze(const ImpactOptions& options) const {
   const auto& repository_path = loaded.repository_path;
   const auto& graph = loaded.graph;
   const TraversalContext context(graph);
-  const auto file_path = normalized_target_path(options.target, repository_path);
+  const auto file_path = normalize_repository_relative_path(options.target, repository_path);
   const auto file = std::ranges::find(graph.files, file_path,
                                       [](const GraphFileNode& node) { return node.path; });
 

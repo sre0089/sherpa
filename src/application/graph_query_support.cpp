@@ -63,4 +63,24 @@ std::vector<const GraphSymbolNode*> find_query_symbols(const GraphSnapshot& grap
   return matches;
 }
 
+std::string normalize_repository_relative_path(const std::string& target,
+                                               const std::filesystem::path& repository_path) {
+  std::filesystem::path path(target);
+  if (path.is_absolute()) {
+    std::error_code error;
+    const auto canonical_path = std::filesystem::weakly_canonical(path, error);
+    if (!error) {
+      path = canonical_path;
+    }
+    path = path.lexically_normal().lexically_relative(repository_path);
+  } else {
+    path = path.lexically_normal();
+  }
+  auto normalized = path.generic_string();
+  if (normalized.starts_with("./")) {
+    normalized.erase(0, 2);
+  }
+  return normalized;
+}
+
 }  // namespace sherpa

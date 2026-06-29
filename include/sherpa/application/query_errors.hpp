@@ -18,6 +18,11 @@ class SymbolNotFoundError : public std::runtime_error {
   using std::runtime_error::runtime_error;
 };
 
+class FileNotFoundError : public std::runtime_error {
+ public:
+  using std::runtime_error::runtime_error;
+};
+
 class AmbiguousSymbolError : public std::runtime_error {
  public:
   AmbiguousSymbolError(std::string message, std::vector<QuerySymbol> candidates);
