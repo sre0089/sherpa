@@ -15,6 +15,10 @@ Current results therefore do not resolve:
 Malformed files are indexed when possible. Parser errors are retained as diagnostics alongside any
 symbols that could still be extracted.
 
+Incremental indexing still reads every supported file to calculate its fingerprint, rebuilds all
+relationships, and writes a complete replacement snapshot. It skips tree-sitter parsing for
+unchanged files but does not yet use filesystem metadata shortcuts or partial graph invalidation.
+
 Call resolution currently prefers exact lexical or qualified names, then unique repository-wide
 names. Member calls without type information are low confidence. Overloads remain ambiguous when
 syntax alone cannot select one definition. Quoted includes use relative, repository-root, or unique

@@ -7,5 +7,7 @@ inline constexpr const char* kSyntaxSchemaMigration =
     R"SHERPA_SQL(@SHERPA_SYNTAX_SCHEMA_SQL@)SHERPA_SQL";
 inline constexpr const char* kRelationshipSchemaMigration =
     R"SHERPA_SQL(@SHERPA_RELATIONSHIP_SCHEMA_SQL@)SHERPA_SQL";
+inline constexpr const char* kCallSiteSchemaMigration =
+    R"SHERPA_SQL(@SHERPA_CALL_SITE_SCHEMA_SQL@)SHERPA_SQL";
 
 }  // namespace sherpa

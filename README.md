@@ -40,7 +40,8 @@ Queries use the current directory as the repository by default. `sherpa query ..
 read-only query surface; the top-level `callers` and `callees` commands remain as compatibility
 aliases. Use `--repo <path>` to query another repository, `--database <path>` to override the
 platform cache location, and `--format json` for machine-readable output. See
-[Querying the graph](docs/querying.md) for lookup rules and the
+[Indexing](docs/indexing.md) for incremental refresh behavior,
+[Querying the graph](docs/querying.md) for lookup rules, and the
 [Query JSON contract](docs/query-json.md) for automation. See
 [Graph export](docs/graph-export.md) for the versioned interchange format.
 

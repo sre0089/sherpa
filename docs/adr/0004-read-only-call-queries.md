@@ -7,7 +7,7 @@ Accepted.
 ## Decision
 
 `callers` and `callees` use a dedicated application service over the existing SQLite relationship
-model. The service opens only an existing schema-version-3 index in read-only mode. It selects
+model. The service opens only an existing schema-version-4 index in read-only mode. It selects
 definitions by exact qualified name, then exact short name, and rejects multiple matches.
 
 The application result preserves resolution, confidence, provenance, source evidence, and

@@ -11,6 +11,7 @@ include(GNUInstallDirs)
 include(CTest)
 
 option(SHERPA_WARNINGS_AS_ERRORS "Treat Sherpa compiler warnings as errors" OFF)
+option(SHERPA_BUILD_BENCHMARKS "Build manual Sherpa benchmarks" OFF)
 
 set_property(
   DIRECTORY
@@ -19,6 +20,7 @@ set_property(
            "${CMAKE_CURRENT_SOURCE_DIR}/migrations/001_initial.sql"
            "${CMAKE_CURRENT_SOURCE_DIR}/migrations/002_syntax.sql"
            "${CMAKE_CURRENT_SOURCE_DIR}/migrations/003_relationships.sql"
+           "${CMAKE_CURRENT_SOURCE_DIR}/migrations/004_call_sites.sql"
 )
 
 find_package(CLI11 CONFIG REQUIRED)
@@ -56,6 +58,8 @@ file(READ "${CMAKE_CURRENT_SOURCE_DIR}/migrations/001_initial.sql" SHERPA_SCHEMA
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/migrations/002_syntax.sql" SHERPA_SYNTAX_SCHEMA_SQL)
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/migrations/003_relationships.sql"
      SHERPA_RELATIONSHIP_SCHEMA_SQL)
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/migrations/004_call_sites.sql"
+     SHERPA_CALL_SITE_SCHEMA_SQL)
 configure_file(
   "${CMAKE_CURRENT_SOURCE_DIR}/src/storage/schema_sql.hpp.in"
   "${CMAKE_CURRENT_BINARY_DIR}/generated/sherpa/storage/schema_sql.hpp"
@@ -125,6 +129,14 @@ target_compile_features(sherpa PRIVATE cxx_std_20)
 set_target_properties(sherpa PROPERTIES CXX_EXTENSIONS OFF)
 target_link_libraries(sherpa PRIVATE Sherpa::core CLI11::CLI11)
 sherpa_enable_warnings(sherpa)
+
+if(SHERPA_BUILD_BENCHMARKS)
+  add_executable(sherpa_index_benchmark benchmarks/index_benchmark.cpp)
+  target_compile_features(sherpa_index_benchmark PRIVATE cxx_std_20)
+  set_target_properties(sherpa_index_benchmark PROPERTIES CXX_EXTENSIONS OFF)
+  target_link_libraries(sherpa_index_benchmark PRIVATE Sherpa::core)
+  sherpa_enable_warnings(sherpa_index_benchmark)
+endif()
 
 install(TARGETS sherpa RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
 

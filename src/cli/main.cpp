@@ -454,13 +454,23 @@ int main(int argc, char** argv) {
           .database_path = database_path,
       });
 
-      std::cout << "Indexed " << result.indexed_files << " C/C++ files\n"
+      std::cout << "Indexed " << result.indexed_files << " C/C++ files ("
+                << result.added_files << " added, " << result.modified_files << " modified, "
+                << result.unchanged_files << " unchanged, " << result.deleted_files
+                << " deleted)\n"
+                << "Parsed: " << result.parsed_files << ", reused: " << result.unchanged_files
+                << '\n'
                 << "Symbols: " << result.extracted_symbols << '\n'
                 << "Includes: " << result.extracted_includes << '\n'
                 << "Diagnostics: " << result.diagnostics << '\n'
                 << "Relationships: " << result.relationships << " ("
                 << result.resolved_relationships << " resolved, " << result.ambiguous_relationships
                 << " ambiguous, " << result.unresolved_relationships << " unresolved)\n"
+                << "Timing: " << result.total_milliseconds << " ms total ("
+                << result.scan_milliseconds << " scan, " << result.cache_load_milliseconds
+                << " cache, " << result.parse_milliseconds << " parse, "
+                << result.relationship_milliseconds << " relationships, "
+                << result.persistence_milliseconds << " persistence)\n"
                 << "Repository: " << result.repository_path.generic_string() << '\n'
                 << "Database: " << result.database_path.generic_string() << '\n';
       for (const auto& warning : result.warnings) {

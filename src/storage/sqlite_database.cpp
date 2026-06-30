@@ -147,6 +147,68 @@ Confidence confidence(std::string_view value) {
   throw std::runtime_error("database contains an invalid relationship confidence");
 }
 
+SymbolKind symbol_kind(std::string_view value) {
+  if (value == "function") {
+    return SymbolKind::kFunction;
+  }
+  if (value == "method") {
+    return SymbolKind::kMethod;
+  }
+  if (value == "class") {
+    return SymbolKind::kClass;
+  }
+  if (value == "struct") {
+    return SymbolKind::kStruct;
+  }
+  throw std::runtime_error("database contains an invalid symbol kind");
+}
+
+SymbolRole symbol_role(std::string_view value) {
+  if (value == "declaration") {
+    return SymbolRole::kDeclaration;
+  }
+  if (value == "definition") {
+    return SymbolRole::kDefinition;
+  }
+  throw std::runtime_error("database contains an invalid symbol role");
+}
+
+DiagnosticSeverity diagnostic_severity(std::string_view value) {
+  if (value == "warning") {
+    return DiagnosticSeverity::kWarning;
+  }
+  if (value == "error") {
+    return DiagnosticSeverity::kError;
+  }
+  throw std::runtime_error("database contains an invalid diagnostic severity");
+}
+
+CallForm call_form(std::string_view value) {
+  if (value == "unqualified") {
+    return CallForm::kUnqualified;
+  }
+  if (value == "qualified") {
+    return CallForm::kQualified;
+  }
+  if (value == "member") {
+    return CallForm::kMember;
+  }
+  if (value == "indirect") {
+    return CallForm::kIndirect;
+  }
+  throw std::runtime_error("database contains an invalid call form");
+}
+
+AnalysisStatus analysis_status(std::string_view value) {
+  if (value == "parsed" || value == "parsed_with_errors") {
+    return AnalysisStatus::kParsed;
+  }
+  if (value == "failed") {
+    return AnalysisStatus::kFailed;
+  }
+  throw std::runtime_error("database contains an invalid parse status");
+}
+
 }  // namespace
 
 SqliteDatabase::SqliteDatabase(const std::filesystem::path& path, DatabaseOpenMode mode) {
@@ -193,7 +255,7 @@ int SqliteDatabase::schema_version() const {
 }
 
 void SqliteDatabase::validate_schema() const {
-  constexpr int kSupportedSchemaVersion = 3;
+  constexpr int kSupportedSchemaVersion = 4;
   const int version = schema_version();
   if (version != kSupportedSchemaVersion) {
     throw std::runtime_error("unsupported database schema version: " + std::to_string(version));
@@ -202,7 +264,7 @@ void SqliteDatabase::validate_schema() const {
 
 void SqliteDatabase::initialize_schema() {
   execute(kInitialSchema);
-  constexpr int kSupportedSchemaVersion = 3;
+  constexpr int kSupportedSchemaVersion = 4;
   int version = schema_version();
 
   const auto migrate = [this](const char* sql) {
@@ -227,6 +289,10 @@ void SqliteDatabase::initialize_schema() {
     migrate(kRelationshipSchemaMigration);
     version = schema_version();
   }
+  if (version == 3) {
+    migrate(kCallSiteSchemaMigration);
+    version = schema_version();
+  }
   if (version != kSupportedSchemaVersion) {
     throw std::runtime_error("unsupported database schema version: " + std::to_string(version));
   }
@@ -239,6 +305,122 @@ bool SqliteDatabase::has_completed_index(const std::string& canonical_repository
                       "WHERE repository.canonical_path = ?1 AND run.status = 'completed' LIMIT 1");
   bind_text(database_, statement.get(), 1, canonical_repository_path);
   return sqlite3_step(statement.get()) == SQLITE_ROW;
+}
+
+std::vector<IndexedFile> SqliteDatabase::load_indexed_files(
+    const std::filesystem::path& repository_path) const {
+  const auto canonical_repository = std::filesystem::canonical(repository_path);
+  const auto canonical_path = canonical_repository.generic_string();
+  Statement files_statement(
+      database_,
+      "SELECT file.id, file.relative_path, file.language, file.content_fingerprint, "
+      "file.size_bytes, file.parse_status "
+      "FROM files file "
+      "JOIN index_runs run ON run.id = file.run_id "
+      "JOIN repositories repository ON repository.active_run_id = file.run_id "
+      "WHERE repository.canonical_path = ?1 AND run.analysis_cache_version = 1 "
+      "ORDER BY file.relative_path");
+  bind_text(database_, files_statement.get(), 1, canonical_path);
+
+  Statement symbols_statement(
+      database_,
+      "SELECT kind, role, name, qualified_name, signature, start_line, start_column, "
+      "end_line, end_column, start_byte, end_byte "
+      "FROM symbols WHERE file_id = ?1 ORDER BY start_byte, id");
+  Statement includes_statement(
+      database_,
+      "SELECT target, is_system, start_line, start_column, end_line, end_column, "
+      "start_byte, end_byte "
+      "FROM include_directives WHERE file_id = ?1 ORDER BY start_byte, id");
+  Statement calls_statement(
+      database_,
+      "SELECT caller_qualified_name, caller_start_byte, callee_text, callee_name, form, "
+      "argument_count, start_line, start_column, end_line, end_column, start_byte, end_byte "
+      "FROM call_sites WHERE file_id = ?1 ORDER BY start_byte, id");
+  Statement diagnostics_statement(
+      database_,
+      "SELECT severity, code, message, start_line, start_column, end_line, end_column, "
+      "start_byte, end_byte "
+      "FROM diagnostics WHERE file_id = ?1 ORDER BY start_byte, id");
+
+  std::vector<IndexedFile> files;
+  while (sqlite3_step(files_statement.get()) == SQLITE_ROW) {
+    const auto file_id = sqlite3_column_int64(files_statement.get(), 0);
+    const auto relative_path = column_text(files_statement.get(), 1);
+    FileAnalysis analysis{
+        .status = analysis_status(column_text(files_statement.get(), 5)),
+        .symbols = {},
+        .includes = {},
+        .calls = {},
+        .diagnostics = {},
+    };
+
+    const auto bind_file = [&](Statement& statement) {
+      sqlite3_reset(statement.get());
+      sqlite3_clear_bindings(statement.get());
+      check(database_, sqlite3_bind_int64(statement.get(), 1, file_id));
+    };
+
+    bind_file(symbols_statement);
+    while (sqlite3_step(symbols_statement.get()) == SQLITE_ROW) {
+      analysis.symbols.push_back(SymbolRecord{
+          .kind = symbol_kind(column_text(symbols_statement.get(), 0)),
+          .role = symbol_role(column_text(symbols_statement.get(), 1)),
+          .name = column_text(symbols_statement.get(), 2),
+          .qualified_name = column_text(symbols_statement.get(), 3),
+          .signature = column_text(symbols_statement.get(), 4),
+          .range = column_range(symbols_statement.get(), 5),
+      });
+    }
+
+    bind_file(includes_statement);
+    while (sqlite3_step(includes_statement.get()) == SQLITE_ROW) {
+      analysis.includes.push_back(IncludeRecord{
+          .target = column_text(includes_statement.get(), 0),
+          .is_system = sqlite3_column_int(includes_statement.get(), 1) != 0,
+          .range = column_range(includes_statement.get(), 2),
+      });
+    }
+
+    bind_file(calls_statement);
+    while (sqlite3_step(calls_statement.get()) == SQLITE_ROW) {
+      analysis.calls.push_back(CallSiteRecord{
+          .caller_qualified_name = column_text(calls_statement.get(), 0),
+          .caller_start_byte =
+              static_cast<std::uint32_t>(sqlite3_column_int64(calls_statement.get(), 1)),
+          .callee_text = column_text(calls_statement.get(), 2),
+          .callee_name = column_text(calls_statement.get(), 3),
+          .form = call_form(column_text(calls_statement.get(), 4)),
+          .argument_count =
+              static_cast<std::uint32_t>(sqlite3_column_int64(calls_statement.get(), 5)),
+          .range = column_range(calls_statement.get(), 6),
+      });
+    }
+
+    bind_file(diagnostics_statement);
+    while (sqlite3_step(diagnostics_statement.get()) == SQLITE_ROW) {
+      analysis.diagnostics.push_back(DiagnosticRecord{
+          .severity = diagnostic_severity(column_text(diagnostics_statement.get(), 0)),
+          .code = column_text(diagnostics_statement.get(), 1),
+          .message = column_text(diagnostics_statement.get(), 2),
+          .range = column_range(diagnostics_statement.get(), 3),
+      });
+    }
+
+    files.push_back(IndexedFile{
+        .file =
+            {
+                .absolute_path = canonical_repository / relative_path,
+                .relative_path = relative_path,
+                .language = column_text(files_statement.get(), 2),
+                .content_fingerprint = column_text(files_statement.get(), 3),
+                .size_bytes =
+                    static_cast<std::uintmax_t>(sqlite3_column_int64(files_statement.get(), 4)),
+            },
+        .analysis = std::move(analysis),
+    });
+  }
+  return files;
 }
 
 std::vector<CallQueryEntry> SqliteDatabase::query_calls(std::int64_t symbol_id,
@@ -469,8 +651,9 @@ void SqliteDatabase::replace_index(const std::filesystem::path& repository_path,
     std::int64_t run_id = 0;
     {
       Statement statement(database_,
-                          "INSERT INTO index_runs(repository_id, started_at, status) "
-                          "VALUES (?1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 'running')");
+                          "INSERT INTO index_runs(repository_id, started_at, status, "
+                          "analysis_cache_version) "
+                          "VALUES (?1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 'running', 1)");
       check(database_, sqlite3_bind_int64(statement.get(), 1, repo_id));
       check(database_, sqlite3_step(statement.get()));
       run_id = sqlite3_last_insert_rowid(database_);
@@ -490,6 +673,12 @@ void SqliteDatabase::replace_index(const std::filesystem::path& repository_path,
         "INSERT INTO include_directives(file_id, target, is_system, start_line, start_column, "
         "end_line, end_column, start_byte, end_byte) "
         "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)");
+    Statement insert_call(
+        database_,
+        "INSERT INTO call_sites(file_id, caller_qualified_name, caller_start_byte, callee_text, "
+        "callee_name, form, argument_count, start_line, start_column, end_line, end_column, "
+        "start_byte, end_byte) "
+        "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)");
     Statement insert_diagnostic(
         database_,
         "INSERT INTO diagnostics(file_id, severity, code, message, start_line, start_column, "
@@ -542,6 +731,20 @@ void SqliteDatabase::replace_index(const std::filesystem::path& repository_path,
         check(database_, sqlite3_bind_int(insert_include.get(), 3, include.is_system ? 1 : 0));
         bind_range(database_, insert_include.get(), 4, include.range);
         check(database_, sqlite3_step(insert_include.get()));
+      }
+
+      for (const auto& call : analysis.calls) {
+        sqlite3_reset(insert_call.get());
+        sqlite3_clear_bindings(insert_call.get());
+        check(database_, sqlite3_bind_int64(insert_call.get(), 1, file_id));
+        bind_text(database_, insert_call.get(), 2, call.caller_qualified_name);
+        check(database_, sqlite3_bind_int64(insert_call.get(), 3, call.caller_start_byte));
+        bind_text(database_, insert_call.get(), 4, call.callee_text);
+        bind_text(database_, insert_call.get(), 5, call.callee_name);
+        bind_text(database_, insert_call.get(), 6, to_string(call.form));
+        check(database_, sqlite3_bind_int64(insert_call.get(), 7, call.argument_count));
+        bind_range(database_, insert_call.get(), 8, call.range);
+        check(database_, sqlite3_step(insert_call.get()));
       }
 
       for (const auto& diagnostic : analysis.diagnostics) {

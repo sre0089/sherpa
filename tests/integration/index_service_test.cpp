@@ -6,6 +6,7 @@
 #include <catch2/matchers/catch_matchers.hpp>
 #include <chrono>
 #include <filesystem>
+#include <fstream>
 #include <stdexcept>
 
 #ifndef SHERPA_SOURCE_DIR
@@ -57,12 +58,20 @@ TEST_CASE("index service stores one active deterministic file index") {
   const auto second = service.index({fixture, database_path});
 
   REQUIRE(first.indexed_files == 3);
+  REQUIRE(first.added_files == 3);
+  REQUIRE(first.parsed_files == 3);
+  REQUIRE(first.unchanged_files == 0);
   REQUIRE(first.extracted_symbols == 4);
   REQUIRE(first.extracted_includes == 2);
   REQUIRE(first.diagnostics == 0);
   REQUIRE(first.relationships == 6);
   REQUIRE(first.resolved_relationships == 6);
   REQUIRE(second.indexed_files == 3);
+  REQUIRE(second.added_files == 0);
+  REQUIRE(second.modified_files == 0);
+  REQUIRE(second.unchanged_files == 3);
+  REQUIRE(second.deleted_files == 0);
+  REQUIRE(second.parsed_files == 0);
   REQUIRE(second.extracted_symbols == 4);
   REQUIRE(second.relationships == 6);
 
@@ -72,11 +81,12 @@ TEST_CASE("index service stores one active deterministic file index") {
   REQUIRE(scalar(database, "SELECT COUNT(*) FROM index_runs") == 1);
   REQUIRE(scalar(database, "SELECT COUNT(*) FROM files") == 3);
   REQUIRE(scalar(database, "SELECT COUNT(*) FROM files WHERE language = 'cpp'") == 3);
-  REQUIRE(scalar(database, "SELECT version FROM schema_metadata") == 3);
+  REQUIRE(scalar(database, "SELECT version FROM schema_metadata") == 4);
   REQUIRE(scalar(database, "SELECT COUNT(*) FROM files WHERE parse_status = 'parsed'") == 3);
   REQUIRE(scalar(database, "SELECT COUNT(*) FROM symbols") == 4);
   REQUIRE(scalar(database, "SELECT COUNT(*) FROM include_directives") == 2);
   REQUIRE(scalar(database, "SELECT COUNT(*) FROM diagnostics") == 0);
+  REQUIRE(scalar(database, "SELECT COUNT(*) FROM call_sites") == 1);
   REQUIRE(scalar(database, "SELECT COUNT(*) FROM relationships") == 6);
   REQUIRE(scalar(database,
                  "SELECT COUNT(*) FROM relationships "
@@ -131,7 +141,7 @@ TEST_CASE("index service migrates a schema version one database") {
   REQUIRE(result.extracted_symbols == 4);
 
   REQUIRE(sqlite3_open(database_path.string().c_str(), &database) == SQLITE_OK);
-  REQUIRE(scalar(database, "SELECT version FROM schema_metadata") == 3);
+  REQUIRE(scalar(database, "SELECT version FROM schema_metadata") == 4);
   REQUIRE(scalar(database, "SELECT COUNT(*) FROM symbols") == 4);
   sqlite3_close(database);
 }
@@ -173,8 +183,10 @@ TEST_CASE("index service migrates a schema version two database") {
   sqlite3* database = nullptr;
   REQUIRE(sqlite3_open(database_path.string().c_str(), &database) == SQLITE_OK);
   REQUIRE(sqlite3_exec(database,
+                       "DROP TABLE call_sites;"
                        "DROP TABLE relationship_candidates;"
                        "DROP TABLE relationships;"
+                       "ALTER TABLE index_runs DROP COLUMN analysis_cache_version;"
                        "UPDATE schema_metadata SET version = 2;",
                        nullptr, nullptr, nullptr) == SQLITE_OK);
   sqlite3_close(database);
@@ -183,8 +195,165 @@ TEST_CASE("index service migrates a schema version two database") {
   REQUIRE(result.relationships == 6);
 
   REQUIRE(sqlite3_open(database_path.string().c_str(), &database) == SQLITE_OK);
-  REQUIRE(scalar(database, "SELECT version FROM schema_metadata") == 3);
+  REQUIRE(scalar(database, "SELECT version FROM schema_metadata") == 4);
   REQUIRE(scalar(database, "SELECT COUNT(*) FROM relationships") == 6);
+  sqlite3_close(database);
+}
+
+TEST_CASE("index service migrates schema version three and invalidates incomplete caches") {
+  TemporaryDirectory temporary;
+  const auto database_path = temporary.path() / "index.sqlite";
+  const auto fixture =
+      std::filesystem::path(SHERPA_SOURCE_DIR) / "tests" / "fixtures" / "basic_cpp";
+
+  sherpa::IndexService service;
+  static_cast<void>(service.index({fixture, database_path}));
+
+  sqlite3* database = nullptr;
+  REQUIRE(sqlite3_open(database_path.string().c_str(), &database) == SQLITE_OK);
+  REQUIRE(sqlite3_exec(database,
+                       "DROP TABLE call_sites;"
+                       "ALTER TABLE index_runs DROP COLUMN analysis_cache_version;"
+                       "UPDATE schema_metadata SET version = 3;",
+                       nullptr, nullptr, nullptr) == SQLITE_OK);
+  sqlite3_close(database);
+
+  const auto result = service.index({fixture, database_path});
+  REQUIRE(result.parsed_files == 3);
+  REQUIRE(result.unchanged_files == 0);
+
+  REQUIRE(sqlite3_open(database_path.string().c_str(), &database) == SQLITE_OK);
+  REQUIRE(scalar(database, "SELECT version FROM schema_metadata") == 4);
+  REQUIRE(scalar(database, "SELECT COUNT(*) FROM call_sites") == 1);
+  sqlite3_close(database);
+}
+
+TEST_CASE("index service reparses only added and modified files and removes deleted files") {
+  TemporaryDirectory temporary;
+  const auto source =
+      std::filesystem::path(SHERPA_SOURCE_DIR) / "tests" / "fixtures" / "basic_cpp";
+  const auto repository = temporary.path() / "repository";
+  const auto database_path = temporary.path() / "incremental.sqlite";
+  std::filesystem::copy(source, repository, std::filesystem::copy_options::recursive);
+
+  sherpa::IndexService service;
+  const auto initial = service.index({repository, database_path});
+  REQUIRE(initial.added_files == 3);
+  REQUIRE(initial.parsed_files == 3);
+
+  {
+    std::ofstream modified(repository / "src" / "main.cpp", std::ios::app);
+    REQUIRE(modified.good());
+    modified << "\nint incremental_marker() { return 7; }\n";
+  }
+  {
+    std::ofstream added(repository / "src" / "extra.cpp");
+    REQUIRE(added.good());
+    added << "int extra_definition() { return 9; }\n";
+  }
+  REQUIRE(std::filesystem::remove(repository / "src" / "calculator.cpp"));
+
+  const auto incremental = service.index({repository, database_path});
+  REQUIRE(incremental.indexed_files == 3);
+  REQUIRE(incremental.added_files == 1);
+  REQUIRE(incremental.modified_files == 1);
+  REQUIRE(incremental.unchanged_files == 1);
+  REQUIRE(incremental.deleted_files == 1);
+  REQUIRE(incremental.parsed_files == 2);
+  REQUIRE(incremental.extracted_symbols == 5);
+
+  const auto unchanged = service.index({repository, database_path});
+  REQUIRE(unchanged.unchanged_files == 3);
+  REQUIRE(unchanged.parsed_files == 0);
+
+  sqlite3* database = nullptr;
+  REQUIRE(sqlite3_open(database_path.string().c_str(), &database) == SQLITE_OK);
+  REQUIRE(scalar(database, "SELECT COUNT(*) FROM files") == 3);
+  REQUIRE(scalar(database,
+                 "SELECT COUNT(*) FROM files WHERE relative_path = 'src/calculator.cpp'") == 0);
+  sqlite3_close(database);
+}
+
+TEST_CASE("failed incremental persistence preserves the prior active snapshot") {
+  TemporaryDirectory temporary;
+  const auto source =
+      std::filesystem::path(SHERPA_SOURCE_DIR) / "tests" / "fixtures" / "basic_cpp";
+  const auto repository = temporary.path() / "repository";
+  const auto database_path = temporary.path() / "atomic.sqlite";
+  std::filesystem::copy(source, repository, std::filesystem::copy_options::recursive);
+
+  sherpa::IndexService service;
+  static_cast<void>(service.index({repository, database_path}));
+
+  sqlite3* database = nullptr;
+  REQUIRE(sqlite3_open(database_path.string().c_str(), &database) == SQLITE_OK);
+  REQUIRE(sqlite3_exec(database,
+                       "CREATE TRIGGER force_file_insert_failure "
+                       "BEFORE INSERT ON files BEGIN "
+                       "SELECT RAISE(ABORT, 'forced persistence failure'); END;",
+                       nullptr, nullptr, nullptr) == SQLITE_OK);
+  sqlite3_close(database);
+
+  {
+    std::ofstream modified(repository / "src" / "main.cpp", std::ios::app);
+    REQUIRE(modified.good());
+    modified << "\nint should_not_publish() { return 1; }\n";
+  }
+
+  REQUIRE_THROWS_WITH(service.index({repository, database_path}), "forced persistence failure");
+
+  REQUIRE(sqlite3_open(database_path.string().c_str(), &database) == SQLITE_OK);
+  REQUIRE(scalar(database, "SELECT COUNT(*) FROM index_runs") == 1);
+  REQUIRE(scalar(database, "SELECT COUNT(*) FROM files") == 3);
+  REQUIRE(scalar(database,
+                 "SELECT COUNT(*) FROM symbols WHERE qualified_name = 'should_not_publish'") == 0);
+  sqlite3_close(database);
+}
+
+TEST_CASE("incremental indexing rebuilds relationships from reused call sites") {
+  TemporaryDirectory temporary;
+  const auto repository = temporary.path() / "repository";
+  const auto database_path = temporary.path() / "relationships.sqlite";
+  std::filesystem::create_directories(repository);
+  {
+    std::ofstream caller(repository / "caller.cpp");
+    REQUIRE(caller.good());
+    caller << "int target();\nint run() { return target(); }\n";
+  }
+  {
+    std::ofstream first_target(repository / "first.cpp");
+    REQUIRE(first_target.good());
+    first_target << "int target() { return 1; }\n";
+  }
+  {
+    std::ofstream second_target(repository / "second.cpp");
+    REQUIRE(second_target.good());
+    second_target << "int target() { return 2; }\n";
+  }
+
+  sherpa::IndexService service;
+  static_cast<void>(service.index({repository, database_path}));
+
+  sqlite3* database = nullptr;
+  REQUIRE(sqlite3_open(database_path.string().c_str(), &database) == SQLITE_OK);
+  REQUIRE(scalar(database,
+                 "SELECT COUNT(*) FROM relationships "
+                 "WHERE kind = 'calls' AND resolution = 'ambiguous'") == 1);
+  sqlite3_close(database);
+
+  REQUIRE(std::filesystem::remove(repository / "second.cpp"));
+  const auto incremental = service.index({repository, database_path});
+  REQUIRE(incremental.parsed_files == 0);
+  REQUIRE(incremental.unchanged_files == 2);
+  REQUIRE(incremental.deleted_files == 1);
+
+  REQUIRE(sqlite3_open(database_path.string().c_str(), &database) == SQLITE_OK);
+  REQUIRE(scalar(database,
+                 "SELECT COUNT(*) FROM relationships "
+                 "WHERE kind = 'calls' AND resolution = 'resolved'") == 1);
+  REQUIRE(scalar(database,
+                 "SELECT COUNT(*) FROM relationships "
+                 "WHERE kind = 'calls' AND resolution = 'ambiguous'") == 0);
   sqlite3_close(database);
 }
 
