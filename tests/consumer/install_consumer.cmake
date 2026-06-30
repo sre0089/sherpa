@@ -41,8 +41,12 @@ execute_process(
   ERROR_VARIABLE configure_error
 )
 if(NOT configure_status EQUAL 0)
+  string(REPLACE "\r" "" configure_output "${configure_output}")
+  string(REPLACE "\n" " | " configure_output "${configure_output}")
+  string(REPLACE "\r" "" configure_error "${configure_error}")
+  string(REPLACE "\n" " | " configure_error "${configure_error}")
   message(FATAL_ERROR
-          "Installed consumer configuration failed:\n${configure_output}\n${configure_error}")
+          "Installed consumer configuration failed: ${configure_output} ${configure_error}")
 endif()
 
 execute_process(
