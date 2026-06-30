@@ -1,0 +1,12 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+find_dependency(SQLite3)
+find_dependency(unofficial-tree-sitter CONFIG)
+find_dependency(tree-sitter-c CONFIG)
+find_dependency(tree-sitter-cpp CONFIG)
+
+include("${CMAKE_CURRENT_LIST_DIR}/SherpaTargets.cmake")
+
+check_required_components(Sherpa)

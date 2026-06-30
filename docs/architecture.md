@@ -1,7 +1,13 @@
 # Architecture
 
-Sherpa is a modular C++ monolith. The CLI calls application services, which coordinate repository
-scanning, language analysis, graph algorithms, and SQLite persistence.
+Sherpa is a modular C++ monolith. The CLI and embedded consumers call the public API facade, which
+coordinates application services for repository scanning, language analysis, graph algorithms,
+and SQLite persistence.
+
+Embedded consumers and the CLI enter through the versioned `sherpa::api::Client` facade. The
+facade exposes repository requests, selectors, evidence-bearing result values, and stable error
+categories while keeping application services, SQLite, tree-sitter, and presentation details
+internal. Installed consumers link the exported `Sherpa::Sherpa` CMake target.
 
 The index application service scans and fingerprints files, reuses complete cached analysis for
 unchanged files, and dispatches added or modified files to the built-in tree-sitter C/C++ frontend.

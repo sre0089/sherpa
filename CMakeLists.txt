@@ -9,6 +9,7 @@ project(
 
 include(GNUInstallDirs)
 include(CTest)
+include(CMakePackageConfigHelpers)
 
 option(SHERPA_WARNINGS_AS_ERRORS "Treat Sherpa compiler warnings as errors" OFF)
 option(SHERPA_BUILD_BENCHMARKS "Build manual Sherpa benchmarks" OFF)
@@ -73,6 +74,8 @@ configure_file(
 
 add_library(
   sherpa_core
+  STATIC
+  src/api/client.cpp
   src/analysis/relationship_resolver.cpp
   src/application/call_query_service.cpp
   src/application/file_query_service.cpp
@@ -104,6 +107,8 @@ add_library(
   src/util/fingerprint.cpp
 )
 add_library(Sherpa::core ALIAS sherpa_core)
+add_library(Sherpa::Sherpa ALIAS sherpa_core)
+set_target_properties(sherpa_core PROPERTIES EXPORT_NAME Sherpa OUTPUT_NAME sherpa)
 
 target_compile_features(sherpa_core PUBLIC cxx_std_20)
 set_target_properties(sherpa_core PROPERTIES CXX_EXTENSIONS OFF)
@@ -138,7 +143,60 @@ if(SHERPA_BUILD_BENCHMARKS)
   sherpa_enable_warnings(sherpa_index_benchmark)
 endif()
 
+install(
+  TARGETS sherpa_core
+  EXPORT SherpaTargets
+  ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+  LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+  RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+  INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+)
 install(TARGETS sherpa RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+
+set(
+  SHERPA_PUBLIC_HEADERS
+  include/sherpa/api/client.hpp
+  include/sherpa/domain/call_query.hpp
+  include/sherpa/domain/file_query.hpp
+  include/sherpa/domain/graph_export.hpp
+  include/sherpa/domain/impact.hpp
+  include/sherpa/domain/path_query.hpp
+  include/sherpa/domain/relationship.hpp
+  include/sherpa/domain/symbol_query.hpp
+  include/sherpa/domain/syntax.hpp
+)
+foreach(header IN LISTS SHERPA_PUBLIC_HEADERS)
+  cmake_path(GET header PARENT_PATH header_directory)
+  string(REPLACE "include/" "" install_directory "${header_directory}")
+  install(FILES "${header}" DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${install_directory}")
+endforeach()
+install(
+  FILES "${CMAKE_CURRENT_BINARY_DIR}/generated/sherpa/version.hpp"
+  DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/sherpa"
+)
+
+configure_package_config_file(
+  "${CMAKE_CURRENT_SOURCE_DIR}/cmake/SherpaConfig.cmake.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/SherpaConfig.cmake"
+  INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/Sherpa"
+)
+write_basic_package_version_file(
+  "${CMAKE_CURRENT_BINARY_DIR}/SherpaConfigVersion.cmake"
+  VERSION "${PROJECT_VERSION}"
+  COMPATIBILITY SameMinorVersion
+)
+install(
+  FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/SherpaConfig.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/SherpaConfigVersion.cmake"
+  DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/Sherpa"
+)
+install(
+  EXPORT SherpaTargets
+  FILE SherpaTargets.cmake
+  NAMESPACE Sherpa::
+  DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/Sherpa"
+)
 
 if(BUILD_TESTING)
   find_package(Catch2 3 CONFIG REQUIRED)
@@ -161,6 +219,7 @@ if(BUILD_TESTING)
     tests/integration/impact_service_test.cpp
     tests/integration/index_service_test.cpp
     tests/integration/path_service_test.cpp
+    tests/integration/public_api_test.cpp
     tests/integration/symbol_query_service_test.cpp
   )
   target_compile_features(sherpa_tests PRIVATE cxx_std_20)
@@ -175,6 +234,26 @@ if(BUILD_TESTING)
   catch_discover_tests(sherpa_tests)
 
   add_test(NAME cli_help COMMAND sherpa --help)
+  add_executable(sherpa_api_consumer tests/consumer/api_consumer.cpp)
+  target_compile_features(sherpa_api_consumer PRIVATE cxx_std_20)
+  set_target_properties(sherpa_api_consumer PROPERTIES CXX_EXTENSIONS OFF)
+  target_link_libraries(sherpa_api_consumer PRIVATE Sherpa::Sherpa)
+  sherpa_enable_warnings(sherpa_api_consumer)
+  add_test(NAME api_build_tree_consumer COMMAND sherpa_api_consumer)
+
+  add_test(
+    NAME api_installed_package_consumer
+    COMMAND
+      "${CMAKE_COMMAND}"
+      -DSHERPA_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+      -DSHERPA_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+      -DSHERPA_GENERATOR=${CMAKE_GENERATOR}
+      -DSHERPA_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}
+      -DSHERPA_GENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}
+      -DSHERPA_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
+      -DSHERPA_CONFIG=$<CONFIG>
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/consumer/install_consumer.cmake
+  )
   add_test(
     NAME cli_index_fixture
     COMMAND

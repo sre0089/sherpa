@@ -18,6 +18,10 @@ cmake --build --preset dev
 ctest --preset dev
 ```
 
+Sherpa also installs a C++20 library and CMake package. Embedded consumers use
+`<sherpa/api/client.hpp>` and link `Sherpa::Sherpa`; see the
+[public C++ API](docs/public-api.md).
+
 ## Use
 
 ```sh

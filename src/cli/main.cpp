@@ -7,12 +7,7 @@
 #include <vector>
 
 #include "graph_export_command.hpp"
-#include "sherpa/application/call_query_service.hpp"
-#include "sherpa/application/file_query_service.hpp"
-#include "sherpa/application/impact_service.hpp"
-#include "sherpa/application/index_service.hpp"
-#include "sherpa/application/path_service.hpp"
-#include "sherpa/application/symbol_query_service.hpp"
+#include "sherpa/api/client.hpp"
 #include "sherpa/presentation/call_query_renderer.hpp"
 #include "sherpa/presentation/file_query_renderer.hpp"
 #include "sherpa/presentation/impact_renderer.hpp"
@@ -63,41 +58,52 @@ bool requests_json_output(int argc, char** argv) {
   return false;
 }
 
+int handle_api_error(const sherpa::api::Error& error, const std::string& format,
+                     std::string_view internal_context) {
+  switch (error.code()) {
+    case sherpa::api::ErrorCode::kInvalidArgument:
+      write_query_error(format, "invalid_usage", error.what());
+      return static_cast<int>(ExitCode::kUsage);
+    case sherpa::api::ErrorCode::kRepositoryUnavailable:
+      write_query_error(format, "repository_unavailable", error.what());
+      return static_cast<int>(ExitCode::kRepositoryUnavailable);
+    case sherpa::api::ErrorCode::kIndexUnavailable:
+      write_query_error(format, "index_unavailable", error.what());
+      return static_cast<int>(ExitCode::kIndexUnavailable);
+    case sherpa::api::ErrorCode::kNotFound:
+      write_query_error(format, "not_found", error.what());
+      return static_cast<int>(ExitCode::kSymbolNotFound);
+    case sherpa::api::ErrorCode::kAmbiguousSymbol:
+      write_query_error(format, "ambiguous_symbol", error.what(), error.candidates());
+      return static_cast<int>(ExitCode::kAmbiguousSymbol);
+    case sherpa::api::ErrorCode::kInternalFailure:
+      write_query_error(format, "internal_failure",
+                        std::string(internal_context) + error.what());
+      return static_cast<int>(ExitCode::kInternalFailure);
+  }
+  return static_cast<int>(ExitCode::kInternalFailure);
+}
+
 int run_query(sherpa::CallQueryDirection direction, const std::string& symbol,
               const std::string& signature, const std::string& file_path,
               const std::filesystem::path& repository_path,
               const std::filesystem::path& database_path, const std::string& format) {
   try {
-    const auto result = sherpa::CallQueryService{}.query({
-        .direction = direction,
-        .symbol = symbol,
-        .signature = signature,
-        .file_path = file_path,
-        .repository_path = repository_path,
-        .database_path = database_path,
-    });
+    const sherpa::api::SymbolRequest request{
+        .repository = {.path = repository_path, .database_path = database_path},
+        .symbol = {.name = symbol, .signature = signature, .file_path = file_path},
+    };
+    const auto result = direction == sherpa::CallQueryDirection::kCallers
+                            ? sherpa::api::Client{}.callers(request)
+                            : sherpa::api::Client{}.callees(request);
     if (format == "json") {
       sherpa::write_call_query_json(std::cout, result);
     } else {
       sherpa::write_call_query_text(std::cout, result);
     }
     return static_cast<int>(ExitCode::kSuccess);
-  } catch (const sherpa::IndexUnavailableError& error) {
-    write_query_error(format, "index_unavailable", error.what());
-    return static_cast<int>(ExitCode::kIndexUnavailable);
-  } catch (const sherpa::SymbolNotFoundError& error) {
-    write_query_error(format, "not_found", error.what());
-    return static_cast<int>(ExitCode::kSymbolNotFound);
-  } catch (const sherpa::AmbiguousSymbolError& error) {
-    write_query_error(format, "ambiguous_symbol", error.what(), error.candidates());
-    return static_cast<int>(ExitCode::kAmbiguousSymbol);
-  } catch (const std::invalid_argument& error) {
-    write_query_error(format, "repository_unavailable", error.what());
-    return static_cast<int>(ExitCode::kRepositoryUnavailable);
-  } catch (const std::exception& error) {
-    write_query_error(format, "internal_failure",
-                      std::string{"query failed: "} + error.what());
-    return static_cast<int>(ExitCode::kInternalFailure);
+  } catch (const sherpa::api::Error& error) {
+    return handle_api_error(error, format, "query failed: ");
   }
 }
 
@@ -106,12 +112,9 @@ int run_symbol_query(const std::string& symbol, const std::string& signature,
                      const std::filesystem::path& repository_path,
                      const std::filesystem::path& database_path, const std::string& format) {
   try {
-    const auto result = sherpa::SymbolQueryService{}.query({
-        .symbol = symbol,
-        .signature = signature,
-        .file_path = file_path,
-        .repository_path = repository_path,
-        .database_path = database_path,
+    const auto result = sherpa::api::Client{}.symbol({
+        .repository = {.path = repository_path, .database_path = database_path},
+        .symbol = {.name = symbol, .signature = signature, .file_path = file_path},
     });
     if (format == "json") {
       sherpa::write_symbol_query_json(std::cout, result);
@@ -119,32 +122,17 @@ int run_symbol_query(const std::string& symbol, const std::string& signature,
       sherpa::write_symbol_query_text(std::cout, result);
     }
     return static_cast<int>(ExitCode::kSuccess);
-  } catch (const sherpa::IndexUnavailableError& error) {
-    write_query_error(format, "index_unavailable", error.what());
-    return static_cast<int>(ExitCode::kIndexUnavailable);
-  } catch (const sherpa::SymbolNotFoundError& error) {
-    write_query_error(format, "not_found", error.what());
-    return static_cast<int>(ExitCode::kSymbolNotFound);
-  } catch (const sherpa::AmbiguousSymbolError& error) {
-    write_query_error(format, "ambiguous_symbol", error.what(), error.candidates());
-    return static_cast<int>(ExitCode::kAmbiguousSymbol);
-  } catch (const std::invalid_argument& error) {
-    write_query_error(format, "repository_unavailable", error.what());
-    return static_cast<int>(ExitCode::kRepositoryUnavailable);
-  } catch (const std::exception& error) {
-    write_query_error(format, "internal_failure",
-                      std::string{"symbol query failed: "} + error.what());
-    return static_cast<int>(ExitCode::kInternalFailure);
+  } catch (const sherpa::api::Error& error) {
+    return handle_api_error(error, format, "symbol query failed: ");
   }
 }
 
 int run_file_query(const std::string& path, const std::filesystem::path& repository_path,
                    const std::filesystem::path& database_path, const std::string& format) {
   try {
-    const auto result = sherpa::FileQueryService{}.query({
+    const auto result = sherpa::api::Client{}.file({
+        .repository = {.path = repository_path, .database_path = database_path},
         .path = path,
-        .repository_path = repository_path,
-        .database_path = database_path,
     });
     if (format == "json") {
       sherpa::write_file_query_json(std::cout, result);
@@ -152,19 +140,8 @@ int run_file_query(const std::string& path, const std::filesystem::path& reposit
       sherpa::write_file_query_text(std::cout, result);
     }
     return static_cast<int>(ExitCode::kSuccess);
-  } catch (const sherpa::IndexUnavailableError& error) {
-    write_query_error(format, "index_unavailable", error.what());
-    return static_cast<int>(ExitCode::kIndexUnavailable);
-  } catch (const sherpa::FileNotFoundError& error) {
-    write_query_error(format, "not_found", error.what());
-    return static_cast<int>(ExitCode::kSymbolNotFound);
-  } catch (const std::invalid_argument& error) {
-    write_query_error(format, "repository_unavailable", error.what());
-    return static_cast<int>(ExitCode::kRepositoryUnavailable);
-  } catch (const std::exception& error) {
-    write_query_error(format, "internal_failure",
-                      std::string{"file query failed: "} + error.what());
-    return static_cast<int>(ExitCode::kInternalFailure);
+  } catch (const sherpa::api::Error& error) {
+    return handle_api_error(error, format, "file query failed: ");
   }
 }
 
@@ -172,12 +149,11 @@ int run_impact(const std::string& target, const std::string& signature,
                const std::string& file_path, const std::filesystem::path& repository_path,
                const std::filesystem::path& database_path, const std::string& format) {
   try {
-    const auto result = sherpa::ImpactService{}.analyze({
+    const auto result = sherpa::api::Client{}.impact({
+        .repository = {.path = repository_path, .database_path = database_path},
         .target = target,
         .signature = signature,
         .file_path = file_path,
-        .repository_path = repository_path,
-        .database_path = database_path,
     });
     if (format == "json") {
       sherpa::write_impact_json(std::cout, result);
@@ -185,22 +161,8 @@ int run_impact(const std::string& target, const std::string& signature,
       sherpa::write_impact_text(std::cout, result);
     }
     return static_cast<int>(ExitCode::kSuccess);
-  } catch (const sherpa::IndexUnavailableError& error) {
-    write_query_error(format, "index_unavailable", error.what());
-    return static_cast<int>(ExitCode::kIndexUnavailable);
-  } catch (const sherpa::ImpactTargetNotFoundError& error) {
-    write_query_error(format, "not_found", error.what());
-    return static_cast<int>(ExitCode::kSymbolNotFound);
-  } catch (const sherpa::AmbiguousSymbolError& error) {
-    write_query_error(format, "ambiguous_symbol", error.what(), error.candidates());
-    return static_cast<int>(ExitCode::kAmbiguousSymbol);
-  } catch (const std::invalid_argument& error) {
-    write_query_error(format, "repository_unavailable", error.what());
-    return static_cast<int>(ExitCode::kRepositoryUnavailable);
-  } catch (const std::exception& error) {
-    write_query_error(format, "internal_failure",
-                      std::string{"impact analysis failed: "} + error.what());
-    return static_cast<int>(ExitCode::kInternalFailure);
+  } catch (const sherpa::api::Error& error) {
+    return handle_api_error(error, format, "impact analysis failed: ");
   }
 }
 
@@ -210,15 +172,14 @@ int run_path(const std::string& source, const std::string& target,
              const std::filesystem::path& repository_path,
              const std::filesystem::path& database_path, const std::string& format) {
   try {
-    const auto result = sherpa::PathService{}.find({
-        .source = source,
-        .target = target,
-        .source_signature = source_signature,
-        .source_file_path = source_file_path,
-        .target_signature = target_signature,
-        .target_file_path = target_file_path,
-        .repository_path = repository_path,
-        .database_path = database_path,
+    const auto result = sherpa::api::Client{}.path({
+        .repository = {.path = repository_path, .database_path = database_path},
+        .source = {.name = source,
+                   .signature = source_signature,
+                   .file_path = source_file_path},
+        .target = {.name = target,
+                   .signature = target_signature,
+                   .file_path = target_file_path},
     });
     if (format == "json") {
       sherpa::write_path_json(std::cout, result);
@@ -226,22 +187,8 @@ int run_path(const std::string& source, const std::string& target,
       sherpa::write_path_text(std::cout, result);
     }
     return static_cast<int>(ExitCode::kSuccess);
-  } catch (const sherpa::IndexUnavailableError& error) {
-    write_query_error(format, "index_unavailable", error.what());
-    return static_cast<int>(ExitCode::kIndexUnavailable);
-  } catch (const sherpa::SymbolNotFoundError& error) {
-    write_query_error(format, "not_found", error.what());
-    return static_cast<int>(ExitCode::kSymbolNotFound);
-  } catch (const sherpa::AmbiguousSymbolError& error) {
-    write_query_error(format, "ambiguous_symbol", error.what(), error.candidates());
-    return static_cast<int>(ExitCode::kAmbiguousSymbol);
-  } catch (const std::invalid_argument& error) {
-    write_query_error(format, "repository_unavailable", error.what());
-    return static_cast<int>(ExitCode::kRepositoryUnavailable);
-  } catch (const std::exception& error) {
-    write_query_error(format, "internal_failure",
-                      std::string{"path query failed: "} + error.what());
-    return static_cast<int>(ExitCode::kInternalFailure);
+  } catch (const sherpa::api::Error& error) {
+    return handle_api_error(error, format, "path query failed: ");
   }
 }
 
@@ -258,9 +205,8 @@ int run_export(const std::filesystem::path& output_path,
     std::cout << "Exported " << result.nodes << " nodes and " << result.edges << " edges\n"
               << "Output: " << result.output_path.generic_string() << '\n';
     return static_cast<int>(ExitCode::kSuccess);
-  } catch (const sherpa::IndexUnavailableError& error) {
-    std::cerr << "error: " << error.what() << '\n';
-    return static_cast<int>(ExitCode::kIndexUnavailable);
+  } catch (const sherpa::api::Error& error) {
+    return handle_api_error(error, "text", "graph export failed: ");
   } catch (const sherpa::cli::ExportOutputError& error) {
     std::cerr << "error: " << error.what() << '\n';
     return static_cast<int>(ExitCode::kOutputUnavailable);
@@ -448,10 +394,9 @@ int main(int argc, char** argv) {
 
   if (*index_command) {
     try {
-      sherpa::IndexService service;
-      const auto result = service.index({
-          .repository_path = repository_path,
-          .database_path = database_path,
+      const auto result = sherpa::api::Client{}.index({
+        .repository_path = repository_path,
+        .database_path = database_path,
       });
 
       std::cout << "Indexed " << result.indexed_files << " C/C++ files ("
@@ -477,12 +422,8 @@ int main(int argc, char** argv) {
         std::cerr << "warning: " << warning << '\n';
       }
       return static_cast<int>(ExitCode::kSuccess);
-    } catch (const std::invalid_argument& error) {
-      std::cerr << "error: " << error.what() << '\n';
-      return static_cast<int>(ExitCode::kRepositoryUnavailable);
-    } catch (const std::exception& error) {
-      std::cerr << "error: indexing failed: " << error.what() << '\n';
-      return static_cast<int>(ExitCode::kInternalFailure);
+    } catch (const sherpa::api::Error& error) {
+      return handle_api_error(error, "text", "indexing failed: ");
     }
   }
 

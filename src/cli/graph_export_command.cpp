@@ -5,7 +5,7 @@
 #include <fstream>
 #include <string>
 
-#include "sherpa/application/graph_export_service.hpp"
+#include "sherpa/api/client.hpp"
 #include "sherpa/presentation/graph_export_renderer.hpp"
 
 namespace sherpa::cli {
@@ -39,8 +39,8 @@ GraphExportCommandResult export_graph(const GraphExportCommandOptions& options) 
     }
   }
 
-  const auto graph = GraphExportService{}.build({
-      .repository_path = options.repository_path,
+  const auto graph = api::Client{}.graph({
+      .path = options.repository_path,
       .database_path = options.database_path,
   });
   const auto temporary_path = temporary_path_for(output_path);

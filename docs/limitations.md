@@ -3,6 +3,10 @@
 Sherpa's current C/C++ frontend uses tree-sitter and reports syntactic evidence. It does not run a
 preprocessor or compiler.
 
+The public C++ API is source-versioned but does not provide binary compatibility. Sherpa currently
+installs a static library, exposes C++ standard-library types, and requires consumers to rebuild
+against each release. There is no stable C interface or plugin ABI.
+
 Current results therefore do not resolve:
 
 - overloaded functions or methods;
