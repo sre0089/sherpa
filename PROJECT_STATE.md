@@ -8,16 +8,16 @@ session.
 
 ## Current milestone
 
-- Milestone 11, atomic incremental indexing, is complete.
-- The next proposed milestone is Milestone 12, public API foundation.
-- Milestone 12 has not been approved or started.
+- Milestone 12, public API foundation, is complete.
+- The next proposed milestone is Milestone 13, plugin and extensibility model.
+- Milestone 13 has not been approved or started.
 
 ## Repository status
 
 - Repository: `https://github.com/sre0089/sherpa`
 - Active branch: `main`
-- State baseline: `e60b13c` (`feat: add atomic incremental indexing`)
-- At verification time, `main` matched `origin/main` and the working tree was clean.
+- State baseline: `1d46576` (`fix: constrain installed consumer configurations`)
+- Before this handoff update, `main` matched `origin/main` and the working tree was clean.
 - License: MIT
 
 ## Completed features
@@ -43,16 +43,19 @@ session.
   - relationships are rebuilt from complete raw analyses;
   - failed persistence preserves the prior active snapshot.
 - Index phase/count metrics and an optional CSV benchmark executable.
+- Version-1 public C++ API through `sherpa::api::Client`, covering indexing, symbol/file queries,
+  callers/callees, impact analysis, directed paths, and graph export without exposing storage,
+  parser, CLI, or presentation internals.
+- Installable headers and static library with exported `Sherpa::Sherpa` CMake target,
+  `find_package(Sherpa CONFIG REQUIRED)` support, build-tree and installed-package consumer tests,
+  and CLI orchestration through the public facade.
 
 ## Latest relevant commits
 
+- `1d46576` — make installed-package consumer tests correct for multi-config generators.
+- `e288fab` — make public API selector tests portable under strict GCC warnings.
+- `a4cdc9b` — public C++ API facade, package export, documentation, ADR, and consumer coverage.
 - `e60b13c` — atomic incremental indexing, schema v4, metrics, tests, and benchmark tooling.
-- `228ba03` — default optional symbol selectors for portable aggregate initialization.
-- `1814591` — portable selector argument lifetimes.
-- `1a22dbc` — deterministic signature/file symbol disambiguation.
-- `d498abb` — versioned query JSON contract.
-- `91661c1` — grouped query engine MVP.
-- `29cf9af` — deterministic graph export.
 
 ## Open bugs
 
@@ -63,13 +66,11 @@ session.
 
 ## Next priorities
 
-1. Present and agree on the exact Milestone 12 public API scope before implementation.
-2. Define the supported C++ library boundary without exposing SQLite, tree-sitter, or CLI details.
-3. Decide API compatibility/versioning, install/export targets, CMake package configuration, and
-   consumer-level tests.
-4. Keep CLI behavior and JSON contracts backward-compatible while moving orchestration behind the
-   public boundary.
-5. Update this file and add an ADR if Milestone 12 establishes a durable compatibility policy.
+1. Present and agree on the exact Milestone 13 plugin/extensibility scope before implementation.
+2. Define extension points and lifecycle boundaries without weakening the versioned public API or
+   exposing storage/parser internals.
+3. Decide plugin discovery, compatibility, isolation, registration, and failure semantics.
+4. Keep CLI, public C++ API, JSON contracts, atomicity, and deterministic output backward-compatible.
 
 ## Key design decisions
 
@@ -85,8 +86,12 @@ session.
 - Incremental indexing reuses parser output but globally rebuilds relationships for cross-file
   correctness.
 - Index publication and graph-file export use atomic replacement.
+- The supported C++ entry point is `sherpa::api::Client`; infrastructure and application services
+  remain internal.
+- Public API version 1 carries a source-compatibility policy within the `0.x` line; no stable binary
+  ABI is promised. Package consumers use the exported `Sherpa::Sherpa` CMake target.
 
-Detailed decisions are recorded in [`docs/adr/`](docs/adr/), currently ADRs 0001–0008.
+Detailed decisions are recorded in [`docs/adr/`](docs/adr/), currently ADRs 0001–0009.
 
 ## Known technical debt and limitations
 
@@ -99,8 +104,9 @@ Detailed decisions are recorded in [`docs/adr/`](docs/adr/), currently ADRs 0001
   write a complete replacement snapshot.
 - Query services load immutable graph snapshots into memory; large-repository scaling has not yet
   been characterized.
-- No installed public C++ SDK, exported CMake package, stable library ABI/API policy, plugin system,
-  editor extension, network API, or LLM integration exists yet.
+- The public API currently exposes concrete result/domain types and a static library; binary ABI
+  stability, shared-library symbol visibility, and deprecation tooling are not yet provided.
+- No plugin system, editor extension, network API, or LLM integration exists yet.
 - No committed large-repository performance baseline, fuzzing, sanitizer matrix, or long-running
   stress suite exists.
 - GitHub Actions currently warns that the pinned `lukka/run-vcpkg` action targets deprecated
@@ -123,11 +129,13 @@ See [`docs/limitations.md`](docs/limitations.md) and
 
 ## Testing and CI status
 
-- Local verification: `ctest --preset dev --output-on-failure` passed 65/65 tests on 2026-06-30.
+- Local verification: `cmake --build --preset dev` and
+  `ctest --preset dev --output-on-failure` passed 69/69 tests on 2026-06-30.
 - Coverage includes unit, integration, CLI, migration, ambiguity, deterministic output,
-  incremental reuse, deletion, relationship re-resolution, and rollback behavior.
+  incremental reuse, deletion, relationship re-resolution, rollback behavior, public API behavior,
+  build-tree consumption, and installed-package consumption.
 - Latest feature CI: GitHub Actions run
-  [`#21`](https://github.com/sre0089/sherpa/actions/runs/28422471402) completed successfully for:
+  [`#29`](https://github.com/sre0089/sherpa/actions/runs/28441148071) completed successfully for:
   - `ubuntu-latest`
   - `macos-latest`
   - `windows-2022`
