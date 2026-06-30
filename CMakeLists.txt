@@ -241,6 +241,7 @@ if(BUILD_TESTING)
   sherpa_enable_warnings(sherpa_api_consumer)
   add_test(NAME api_build_tree_consumer COMMAND sherpa_api_consumer)
 
+  get_property(sherpa_is_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
   add_test(
     NAME api_installed_package_consumer
     COMMAND
@@ -252,6 +253,7 @@ if(BUILD_TESTING)
       -DSHERPA_GENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}
       -DSHERPA_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
       -DSHERPA_CONFIG=$<CONFIG>
+      -DSHERPA_MULTI_CONFIG=${sherpa_is_multi_config}
       -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/consumer/install_consumer.cmake
   )
   add_test(

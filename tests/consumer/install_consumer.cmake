@@ -21,9 +21,13 @@ set(
   -B "${consumer_build_directory}"
   -G "${SHERPA_GENERATOR}"
   "-DCMAKE_PREFIX_PATH=${install_directory}"
-  "-DCMAKE_BUILD_TYPE=${SHERPA_CONFIG}"
   "-DVCPKG_INSTALLED_DIR=${SHERPA_BINARY_DIR}/vcpkg_installed"
 )
+if(SHERPA_MULTI_CONFIG)
+  list(APPEND configure_command "-DCMAKE_CONFIGURATION_TYPES=${SHERPA_CONFIG}")
+else()
+  list(APPEND configure_command "-DCMAKE_BUILD_TYPE=${SHERPA_CONFIG}")
+endif()
 if(NOT SHERPA_GENERATOR_PLATFORM STREQUAL "")
   list(APPEND configure_command -A "${SHERPA_GENERATOR_PLATFORM}")
 endif()
