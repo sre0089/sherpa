@@ -45,8 +45,16 @@ if(NOT configure_status EQUAL 0)
   string(REPLACE "\n" " " configure_output "${configure_output}")
   string(REPLACE "\r" "" configure_error "${configure_error}")
   string(REPLACE "\n" " " configure_error "${configure_error}")
-  message(FATAL_ERROR
-          "Installed consumer configuration failed: ${configure_error} ${configure_output}")
+  if(DEFINED ENV{GITHUB_ACTIONS})
+    set(configure_details "${configure_error} ${configure_output}")
+    string(REPLACE "%" "%25" configure_details "${configure_details}")
+    execute_process(
+      COMMAND
+        "${CMAKE_COMMAND}" -E echo
+        "::error title=Installed consumer configuration failed::${configure_details}"
+    )
+  endif()
+  message(FATAL_ERROR "Installed consumer configuration failed")
 endif()
 
 execute_process(
