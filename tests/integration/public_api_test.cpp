@@ -50,13 +50,23 @@ TEST_CASE("public API indexes and queries without exposing infrastructure") {
   };
   const auto symbol = client.symbol({
       .repository = indexed_repository,
-      .symbol = {.name = "run"},
+      .symbol =
+          {
+              .name = "run",
+              .signature = "",
+              .file_path = "",
+          },
   });
   REQUIRE(symbol.symbol.qualified_name == "run");
 
   const auto calls = client.callees({
       .repository = indexed_repository,
-      .symbol = {.name = "run"},
+      .symbol =
+          {
+              .name = "run",
+              .signature = "",
+              .file_path = "",
+          },
   });
   REQUIRE_FALSE(calls.calls.empty());
 
@@ -83,7 +93,12 @@ TEST_CASE("public API reports stable error categories and ambiguity candidates")
   try {
     static_cast<void>(client.symbol({
         .repository = indexed_repository,
-        .symbol = {.name = "overloaded"},
+        .symbol =
+            {
+                .name = "overloaded",
+                .signature = "",
+                .file_path = "",
+            },
     }));
     FAIL("expected an ambiguous symbol error");
   } catch (const sherpa::api::Error& error) {
@@ -94,7 +109,12 @@ TEST_CASE("public API reports stable error categories and ambiguity candidates")
   try {
     static_cast<void>(client.symbol({
         .repository = indexed_repository,
-        .symbol = {.name = "missing"},
+        .symbol =
+            {
+                .name = "missing",
+                .signature = "",
+                .file_path = "",
+            },
     }));
     FAIL("expected a not-found error");
   } catch (const sherpa::api::Error& error) {
