@@ -175,7 +175,9 @@ TEST_CASE("server returns framed parse errors and rejects exit before shutdown")
 
   std::stringstream invalid_input;
   std::stringstream invalid_output;
-  invalid_input << frame(Json::object());
+  const auto invalid_payload = Json::object().dump();
+  invalid_input << "Content-Length: " << invalid_payload.size() << "\r\r\n\r\r\n"
+                << invalid_payload;
   REQUIRE(sherpa::server::JsonRpcServer{}.run(invalid_input, invalid_output) == 0);
   const auto invalid_messages = parse_messages(invalid_output.str());
   REQUIRE(invalid_messages.size() == 1);

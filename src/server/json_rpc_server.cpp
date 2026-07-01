@@ -107,7 +107,7 @@ std::optional<std::string> read_payload(std::istream& input) {
 
   while (std::getline(input, line)) {
     read_header = true;
-    if (!line.empty() && line.back() == '\r') {
+    while (!line.empty() && line.back() == '\r') {
       line.pop_back();
     }
     if (line.empty()) {
