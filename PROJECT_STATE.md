@@ -1,6 +1,6 @@
 # Project State
 
-Last verified: 2026-06-30
+Last verified: 2026-07-01
 
 This file is the concise handoff between development sessions. The repository and linked detailed
 documentation remain authoritative. Update this file after every completed milestone or major work
@@ -8,15 +8,15 @@ session.
 
 ## Current milestone
 
-- Milestone 13, plugin and extensibility model, is complete.
-- The next proposed milestone is Milestone 14, editor/VS Code integration foundation.
-- Milestone 14 has not been approved or started.
+- Milestone 14, editor/VS Code integration foundation, is complete.
+- The next proposed milestone is Milestone 15, additional language support.
+- Milestone 15 has not been approved or started.
 
 ## Repository status
 
 - Repository: `https://github.com/sre0089/sherpa`
 - Active branch: `main`
-- State baseline: `f80e55d` (`feat: add versioned plugin foundation`)
+- State baseline: `af6c69b` (`fix: tolerate translated CRLF framing`)
 - Before this handoff update, `main` matched `origin/main` and the working tree was clean.
 - License: MIT
 
@@ -52,9 +52,16 @@ session.
 - Version-1 in-process plugin API with explicit registration, validated stable IDs, exact API
   compatibility, shared ownership, deterministic before/after operation hooks, and failure errors
   that distinguish whether core work completed.
+- Installed `sherpa-server` process with version-1 JSON-RPC over byte-exact `Content-Length`
+  framing, one-workspace ownership, serial operations, request cancellation, stable error mapping,
+  and all existing indexing/query/graph capabilities.
+- Dependency-free VS Code extension foundation with configurable server/database paths, cancellable
+  workspace indexing, status inspection, symbol queries, and Node-to-server integration coverage.
 
 ## Latest relevant commits
 
+- `af6c69b` — tolerate Windows/CMake CRLF translation in server framing.
+- `518a57e` — editor server, versioned protocol, VS Code extension, ADR, docs, and tests.
 - `f80e55d` — versioned plugin registry, operation hooks, failure semantics, docs, ADR, and tests.
 - `1d46576` — make installed-package consumer tests correct for multi-config generators.
 - `e288fab` — make public API selector tests portable under strict GCC warnings.
@@ -70,12 +77,12 @@ session.
 
 ## Next priorities
 
-1. Present and agree on the exact Milestone 14 editor/VS Code integration scope before
-   implementation.
-2. Define an editor-facing process/protocol boundary that does not expose SQLite or internal C++
-   services.
-3. Decide request lifecycle, cancellation, workspace/index ownership, diagnostics, and packaging.
-4. Preserve CLI, public C++ and plugin APIs, JSON contracts, atomicity, and deterministic output.
+1. Present and agree on the exact Milestone 15 language-support scope before implementation.
+2. Define the language-frontend registration boundary and select the next language from concrete
+   user value and parser maturity.
+3. Specify cross-language symbol, call, include/import, file-extension, and fixture behavior.
+4. Preserve existing C/C++ results, schema compatibility, deterministic output, and public/editor
+   contracts.
 
 ## Key design decisions
 
@@ -100,8 +107,15 @@ session.
 - Plugins are linked into the host; shared-library discovery and a stable plugin ABI are deferred.
 - Plugin phases are fail-fast. Before-hook failures prevent core work; after-hook failures report
   that core work already completed.
+- Editor integrations use a separate `sherpa-server` process with independently versioned JSON-RPC
+  over stdio; SQLite and C++ internals remain hidden.
+- One server owns one workspace and serializes core operations while reading cancellations
+  concurrently. Active parser/SQLite work is not forcibly interrupted, so cancelled indexing may
+  still publish an atomic snapshot.
+- The initial VS Code integration is command-driven and dependency-free; it does not claim LSP
+  compatibility.
 
-Detailed decisions are recorded in [`docs/adr/`](docs/adr/), currently ADRs 0001–0010.
+Detailed decisions are recorded in [`docs/adr/`](docs/adr/), currently ADRs 0001–0011.
 
 ## Known technical debt and limitations
 
@@ -118,7 +132,10 @@ Detailed decisions are recorded in [`docs/adr/`](docs/adr/), currently ADRs 0001
   stability, shared-library symbol visibility, and deprecation tooling are not yet provided.
 - Plugins are in-process observers only. There is no dynamic discovery, stable plugin ABI,
   isolation, parser registration, CLI command contribution, or request/result transformation.
-- No editor extension, network API, or LLM integration exists yet.
+- The editor protocol has coarse cancellation only. The VS Code extension has no LSP navigation,
+  unsaved-buffer analysis, source diagnostic publication, multi-root ownership, or marketplace
+  package.
+- No network API or LLM integration exists yet.
 - No committed large-repository performance baseline, fuzzing, sanitizer matrix, or long-running
   stress suite exists.
 - GitHub Actions currently warns that the pinned `lukka/run-vcpkg` action targets deprecated
@@ -142,13 +159,14 @@ See [`docs/limitations.md`](docs/limitations.md) and
 ## Testing and CI status
 
 - Local verification: `cmake --build --preset dev` and
-  `ctest --preset dev --output-on-failure` passed 74/74 tests on 2026-06-30.
+  `ctest --preset dev --output-on-failure` passed 81/81 tests on 2026-07-01.
 - Coverage includes unit, integration, CLI, migration, ambiguity, deterministic output,
   incremental reuse, deletion, relationship re-resolution, rollback behavior, public API behavior,
   plugin registration/order/failure semantics, build-tree consumption, and installed-package
-  consumption.
+  consumption. Server framing/lifecycle/cancellation, process execution, Node transport, and
+  Node-to-server integration are also covered.
 - Latest feature CI: GitHub Actions run
-  [`#31`](https://github.com/sre0089/sherpa/actions/runs/28486804288) completed successfully for:
+  [`#34`](https://github.com/sre0089/sherpa/actions/runs/28498265747) completed successfully for:
   - `ubuntu-latest`
   - `macos-latest`
   - `windows-2022`
@@ -160,7 +178,7 @@ The roadmap is provisional; approve and complete one milestone at a time.
 
 12. Public API foundation — complete.
 13. Plugin and extensibility model — complete.
-14. Editor/VS Code integration foundation.
+14. Editor/VS Code integration foundation — complete.
 15. Additional language support.
 16. Packaging and release hardening for GitHub, Homebrew, and PyPI.
 17. LLM and assistant integration.
