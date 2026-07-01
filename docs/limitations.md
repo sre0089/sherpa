@@ -9,6 +9,11 @@ against each release. The plugin API supports explicitly linked in-process obser
 no stable C interface, plugin ABI, shared-library discovery, process isolation, parser extension,
 or request/result mutation.
 
+The editor server processes one initialized workspace serially. Cancellation does not interrupt
+active scanner, parser, or SQLite work; it skips queued work or suppresses an in-flight response.
+The VS Code extension is command-driven and does not yet provide LSP navigation, unsaved-buffer
+analysis, source diagnostic publication, multi-root ownership, or marketplace packaging.
+
 Current results therefore do not resolve:
 
 - overloaded functions or methods;

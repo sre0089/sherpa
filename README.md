@@ -23,6 +23,10 @@ Sherpa also installs a C++20 library and CMake package. Embedded consumers use
 [public C++ API](docs/public-api.md). Hosts can also register explicitly linked observers through
 the versioned [plugin API](docs/plugin-api.md).
 
+Editor integrations can launch the installed `sherpa-server` JSON-RPC process. See
+[editor integration](docs/editor-integration.md) and the initial
+[VS Code extension](editors/vscode/).
+
 ## Use
 
 ```sh

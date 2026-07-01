@@ -1,0 +1,59 @@
+{
+  "name": "sherpa-code-intelligence",
+  "displayName": "Sherpa Code Intelligence",
+  "description": "Local evidence-backed C and C++ codebase intelligence",
+  "version": "0.1.0",
+  "publisher": "sherpa-project",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:sherpa.indexWorkspace",
+    "onCommand:sherpa.showStatus",
+    "onCommand:sherpa.querySymbol"
+  ],
+  "main": "./src/extension.js",
+  "files": [
+    "README.md",
+    "src"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "sherpa.indexWorkspace",
+        "title": "Sherpa: Index Workspace"
+      },
+      {
+        "command": "sherpa.showStatus",
+        "title": "Sherpa: Show Status"
+      },
+      {
+        "command": "sherpa.querySymbol",
+        "title": "Sherpa: Query Symbol"
+      }
+    ],
+    "configuration": {
+      "title": "Sherpa",
+      "properties": {
+        "sherpa.serverPath": {
+          "type": "string",
+          "default": "sherpa-server",
+          "description": "Path or command name for the sherpa-server executable."
+        },
+        "sherpa.databasePath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional explicit SQLite index path for the active workspace."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "test": "node --test test/json_rpc_client.test.js"
+  }
+}

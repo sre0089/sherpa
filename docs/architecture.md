@@ -15,6 +15,11 @@ registration order. Their context contains only public operation and repository 
 cannot mutate requests, results, persistence, or graph ordering. Shared-library discovery and a
 stable plugin ABI are outside the current boundary.
 
+Editor integrations launch the separate `sherpa-server` process and communicate through a
+versioned JSON-RPC protocol over stdio. The server owns one workspace, serializes operations
+through the public client, and reuses existing query JSON contracts. This process boundary keeps
+editors independent from Sherpa's C++ ABI and SQLite format.
+
 The index application service scans and fingerprints files, reuses complete cached analysis for
 unchanged files, and dispatches added or modified files to the built-in tree-sitter C/C++ frontend.
 The relationship resolver rebuilds file-to-symbol definitions, symbol-to-symbol calls, and

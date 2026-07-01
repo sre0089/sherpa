@@ -25,7 +25,9 @@ set_property(
 )
 
 find_package(CLI11 CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
 find_package(SQLite3 REQUIRED)
+find_package(Threads REQUIRED)
 find_package(unofficial-tree-sitter CONFIG REQUIRED)
 find_package(tree-sitter-c CONFIG REQUIRED)
 find_package(tree-sitter-cpp CONFIG REQUIRED)
@@ -130,11 +132,27 @@ target_link_libraries(
 )
 sherpa_enable_warnings(sherpa_core)
 
+add_library(sherpa_server_core STATIC src/server/json_rpc_server.cpp)
+target_compile_features(sherpa_server_core PUBLIC cxx_std_20)
+set_target_properties(sherpa_server_core PROPERTIES CXX_EXTENSIONS OFF)
+target_include_directories(sherpa_server_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(
+  sherpa_server_core
+  PUBLIC Sherpa::core nlohmann_json::nlohmann_json Threads::Threads
+)
+sherpa_enable_warnings(sherpa_server_core)
+
 add_executable(sherpa src/cli/graph_export_command.cpp src/cli/main.cpp)
 target_compile_features(sherpa PRIVATE cxx_std_20)
 set_target_properties(sherpa PROPERTIES CXX_EXTENSIONS OFF)
 target_link_libraries(sherpa PRIVATE Sherpa::core CLI11::CLI11)
 sherpa_enable_warnings(sherpa)
+
+add_executable(sherpa_server src/server/main.cpp)
+target_compile_features(sherpa_server PRIVATE cxx_std_20)
+set_target_properties(sherpa_server PROPERTIES CXX_EXTENSIONS OFF OUTPUT_NAME sherpa-server)
+target_link_libraries(sherpa_server PRIVATE sherpa_server_core)
+sherpa_enable_warnings(sherpa_server)
 
 if(SHERPA_BUILD_BENCHMARKS)
   add_executable(sherpa_index_benchmark benchmarks/index_benchmark.cpp)
@@ -153,6 +171,7 @@ install(
   INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
 )
 install(TARGETS sherpa RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+install(TARGETS sherpa_server RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
 
 set(
   SHERPA_PUBLIC_HEADERS
@@ -223,6 +242,7 @@ if(BUILD_TESTING)
     tests/integration/index_service_test.cpp
     tests/integration/path_service_test.cpp
     tests/integration/public_api_test.cpp
+    tests/integration/server_test.cpp
     tests/integration/symbol_query_service_test.cpp
   )
   target_compile_features(sherpa_tests PRIVATE cxx_std_20)
@@ -230,13 +250,23 @@ if(BUILD_TESTING)
   target_compile_definitions(
     sherpa_tests PRIVATE SHERPA_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
   )
-  target_link_libraries(sherpa_tests PRIVATE Sherpa::core Catch2::Catch2WithMain)
+  target_link_libraries(sherpa_tests PRIVATE sherpa_server_core Catch2::Catch2WithMain)
   sherpa_enable_warnings(sherpa_tests)
 
   include(Catch)
   catch_discover_tests(sherpa_tests)
 
   add_test(NAME cli_help COMMAND sherpa --help)
+  add_test(
+    NAME server_process_protocol
+    COMMAND
+      "${CMAKE_COMMAND}"
+      -DSHERPA_SERVER=$<TARGET_FILE:sherpa_server>
+      -DREPOSITORY_PATH=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/basic_cpp
+      -DINPUT_PATH=${CMAKE_CURRENT_BINARY_DIR}/server-process-input.txt
+      -DOUTPUT_PATH=${CMAKE_CURRENT_BINARY_DIR}/server-process-output.txt
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/server/process.cmake
+  )
   add_executable(sherpa_api_consumer tests/consumer/api_consumer.cpp)
   target_compile_features(sherpa_api_consumer PRIVATE cxx_std_20)
   set_target_properties(sherpa_api_consumer PROPERTIES CXX_EXTENSIONS OFF)
@@ -314,4 +344,26 @@ if(BUILD_TESTING)
       -DOUTPUT_PATH=${CMAKE_CURRENT_BINARY_DIR}/graph-export.json
       -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/export.cmake
   )
+
+  find_program(SHERPA_NODE_EXECUTABLE NAMES node nodejs)
+  if(SHERPA_NODE_EXECUTABLE)
+    add_test(
+      NAME vscode_extension_tests
+      COMMAND
+        "${SHERPA_NODE_EXECUTABLE}" --test
+        "${CMAKE_CURRENT_SOURCE_DIR}/editors/vscode/test/json_rpc_client.test.js"
+    )
+    add_test(
+      NAME vscode_server_integration
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        SHERPA_SERVER_PATH=$<TARGET_FILE:sherpa_server>
+        SHERPA_TEST_REPOSITORY=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/basic_cpp
+        SHERPA_TEST_DATABASE=${CMAKE_CURRENT_BINARY_DIR}/vscode-server.sqlite
+        "${SHERPA_NODE_EXECUTABLE}" --test
+        "${CMAKE_CURRENT_SOURCE_DIR}/editors/vscode/test/server_integration.test.js"
+    )
+  else()
+    message(WARNING "Node.js was not found; VS Code extension tests are disabled")
+  endif()
 endif()
