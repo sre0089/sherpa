@@ -20,7 +20,8 @@ ctest --preset dev
 
 Sherpa also installs a C++20 library and CMake package. Embedded consumers use
 `<sherpa/api/client.hpp>` and link `Sherpa::Sherpa`; see the
-[public C++ API](docs/public-api.md).
+[public C++ API](docs/public-api.md). Hosts can also register explicitly linked observers through
+the versioned [plugin API](docs/plugin-api.md).
 
 ## Use
 

@@ -76,6 +76,10 @@ int handle_api_error(const sherpa::api::Error& error, const std::string& format,
     case sherpa::api::ErrorCode::kAmbiguousSymbol:
       write_query_error(format, "ambiguous_symbol", error.what(), error.candidates());
       return static_cast<int>(ExitCode::kAmbiguousSymbol);
+    case sherpa::api::ErrorCode::kPluginFailure:
+      write_query_error(format, "internal_failure",
+                        std::string(internal_context) + error.what());
+      return static_cast<int>(ExitCode::kInternalFailure);
     case sherpa::api::ErrorCode::kInternalFailure:
       write_query_error(format, "internal_failure",
                         std::string(internal_context) + error.what());

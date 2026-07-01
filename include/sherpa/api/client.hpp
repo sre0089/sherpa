@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "sherpa/api/plugin.hpp"
 #include "sherpa/domain/call_query.hpp"
 #include "sherpa/domain/file_query.hpp"
 #include "sherpa/domain/graph_export.hpp"
@@ -24,19 +25,28 @@ enum class ErrorCode {
   kIndexUnavailable,
   kNotFound,
   kAmbiguousSymbol,
+  kPluginFailure,
   kInternalFailure,
 };
 
 class Error : public std::runtime_error {
  public:
-  Error(ErrorCode code, std::string message, std::vector<QuerySymbol> candidates = {});
+  Error(ErrorCode code,
+        std::string message,
+        std::vector<QuerySymbol> candidates = {},
+        std::string plugin_id = {},
+        bool operation_completed = false);
 
   [[nodiscard]] ErrorCode code() const noexcept;
   [[nodiscard]] const std::vector<QuerySymbol>& candidates() const noexcept;
+  [[nodiscard]] const std::string& plugin_id() const noexcept;
+  [[nodiscard]] bool operation_completed() const noexcept;
 
  private:
   ErrorCode code_;
   std::vector<QuerySymbol> candidates_;
+  std::string plugin_id_;
+  bool operation_completed_;
 };
 
 struct Repository {
@@ -105,6 +115,8 @@ struct PathRequest {
 
 class Client {
  public:
+  explicit Client(PluginRegistry plugins = {});
+
   [[nodiscard]] IndexResult index(const IndexRequest& request) const;
   [[nodiscard]] SymbolQueryResult symbol(const SymbolRequest& request) const;
   [[nodiscard]] FileQueryResult file(const FileRequest& request) const;
@@ -113,6 +125,9 @@ class Client {
   [[nodiscard]] ImpactResult impact(const ImpactRequest& request) const;
   [[nodiscard]] PathResult path(const PathRequest& request) const;
   [[nodiscard]] GraphExport graph(const Repository& repository) const;
+
+ private:
+  PluginRegistry plugins_;
 };
 
 [[nodiscard]] const char* to_string(ErrorCode code) noexcept;

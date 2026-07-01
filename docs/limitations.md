@@ -5,7 +5,9 @@ preprocessor or compiler.
 
 The public C++ API is source-versioned but does not provide binary compatibility. Sherpa currently
 installs a static library, exposes C++ standard-library types, and requires consumers to rebuild
-against each release. There is no stable C interface or plugin ABI.
+against each release. The plugin API supports explicitly linked in-process observers only. There is
+no stable C interface, plugin ABI, shared-library discovery, process isolation, parser extension,
+or request/result mutation.
 
 Current results therefore do not resolve:
 

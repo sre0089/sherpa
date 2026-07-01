@@ -76,6 +76,7 @@ add_library(
   sherpa_core
   STATIC
   src/api/client.cpp
+  src/api/plugin.cpp
   src/analysis/relationship_resolver.cpp
   src/application/call_query_service.cpp
   src/application/file_query_service.cpp
@@ -156,6 +157,7 @@ install(TARGETS sherpa RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
 set(
   SHERPA_PUBLIC_HEADERS
   include/sherpa/api/client.hpp
+  include/sherpa/api/plugin.hpp
   include/sherpa/domain/call_query.hpp
   include/sherpa/domain/file_query.hpp
   include/sherpa/domain/graph_export.hpp
@@ -208,6 +210,7 @@ if(BUILD_TESTING)
     tests/unit/fingerprint_test.cpp
     tests/unit/impact_renderer_test.cpp
     tests/unit/path_renderer_test.cpp
+    tests/unit/plugin_test.cpp
     tests/unit/query_error_renderer_test.cpp
     tests/unit/relationship_resolver_test.cpp
     tests/unit/repository_scanner_test.cpp

@@ -22,6 +22,9 @@ const auto result = client.symbol({
 Failures are reported as `sherpa::api::Error`. Callers should dispatch on `Error::code()` rather
 than matching message text. Ambiguous symbol errors retain ordered candidates.
 
+Embedding applications can construct a client with explicitly registered in-process plugins. The
+plugin API is separately versioned and observational; see the [plugin API](plugin-api.md).
+
 ## CMake consumption
 
 After installing Sherpa:
@@ -37,8 +40,9 @@ tree-sitter, CLI, application-service, storage, parser, or presentation headers.
 ## Compatibility
 
 `sherpa::api::kApiVersion` identifies the public C++ contract and is currently `1`. The supported
-surface consists of `sherpa/api/client.hpp` and the domain value headers it includes. Other headers
-are internal even when they are available in a source checkout.
+surface consists of `sherpa/api/client.hpp`, `sherpa/api/plugin.hpp`, and the domain value headers
+included by the client. Other headers are internal even when they are available in a source
+checkout.
 
 Sherpa is pre-1.0. Within one API version, existing names and value-field meanings remain stable;
 additive methods, enum values, and fields may be introduced. A source-breaking change requires an

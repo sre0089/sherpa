@@ -9,6 +9,12 @@ facade exposes repository requests, selectors, evidence-bearing result values, a
 categories while keeping application services, SQLite, tree-sitter, and presentation details
 internal. Installed consumers link the exported `Sherpa::Sherpa` CMake target.
 
+Embedding hosts may explicitly register versioned in-process plugins when constructing the client.
+Plugins observe valid operations before execution and successful operations after execution in
+registration order. Their context contains only public operation and repository values; they
+cannot mutate requests, results, persistence, or graph ordering. Shared-library discovery and a
+stable plugin ABI are outside the current boundary.
+
 The index application service scans and fingerprints files, reuses complete cached analysis for
 unchanged files, and dispatches added or modified files to the built-in tree-sitter C/C++ frontend.
 The relationship resolver rebuilds file-to-symbol definitions, symbol-to-symbol calls, and
