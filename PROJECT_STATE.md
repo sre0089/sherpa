@@ -8,15 +8,15 @@ session.
 
 ## Current milestone
 
-- Milestone 14, editor/VS Code integration foundation, is complete.
-- The next proposed milestone is Milestone 15, additional language support.
-- Milestone 15 has not been approved or started.
+- Milestone 15, Python language support, is complete.
+- The next proposed milestone is Milestone 16, packaging and release hardening.
+- Milestone 16 has not been approved or started.
 
 ## Repository status
 
 - Repository: `https://github.com/sre0089/sherpa`
 - Active branch: `main`
-- State baseline: `af6c69b` (`fix: tolerate translated CRLF framing`)
+- State baseline: `44fdbc6` (`feat: add Python language indexing`)
 - Before this handoff update, `main` matched `origin/main` and the working tree was clean.
 - License: MIT
 
@@ -24,8 +24,11 @@ session.
 
 - C++20 modular-monolith foundation using CMake and vcpkg.
 - Cross-platform CI for Ubuntu, macOS, and Windows/MSVC.
-- Deterministic scanning of supported C and C++ source/header extensions.
-- Tree-sitter C/C++ extraction of symbols, includes, calls, source ranges, and diagnostics.
+- Deterministic scanning of supported C, C++, Python, and Python stub extensions.
+- Pinned tree-sitter C/C++/Python extraction of symbols, includes/imports, calls, source ranges,
+  signatures, and diagnostics behind one frontend facade.
+- Repository-module-qualified Python symbols, conservative local absolute/relative import
+  resolution, and language-family call isolation for mixed repositories.
 - SQLite schema migrations through version 4.
 - Evidence-bearing `defines`, `calls`, and `includes` relationships with resolution, confidence,
   provenance, and ranked ambiguity candidates.
@@ -60,6 +63,9 @@ session.
 
 ## Latest relevant commits
 
+- `44fdbc6` — Python scanning/extraction, local import resolution, mixed-language isolation, pinned
+  grammar packaging, ADR, docs, and tests.
+- `c4116c8` — update project state after successful Milestone 14 CI.
 - `af6c69b` — tolerate Windows/CMake CRLF translation in server framing.
 - `518a57e` — editor server, versioned protocol, VS Code extension, ADR, docs, and tests.
 - `f80e55d` — versioned plugin registry, operation hooks, failure semantics, docs, ADR, and tests.
@@ -77,12 +83,10 @@ session.
 
 ## Next priorities
 
-1. Present and agree on the exact Milestone 15 language-support scope before implementation.
-2. Define the language-frontend registration boundary and select the next language from concrete
-   user value and parser maturity.
-3. Specify cross-language symbol, call, include/import, file-extension, and fixture behavior.
-4. Preserve existing C/C++ results, schema compatibility, deterministic output, and public/editor
-   contracts.
+1. Present and agree on the exact Milestone 16 packaging and release scope before implementation.
+2. Define supported release artifacts, platforms, signing/provenance expectations, and versioning.
+3. Harden GitHub release, Homebrew, and PyPI distribution without widening the public ABI promise.
+4. Preserve reproducible vcpkg dependencies, installed-package consumption, and cross-platform CI.
 
 ## Key design decisions
 
@@ -114,8 +118,13 @@ session.
   still publish an atomic snapshot.
 - The initial VS Code integration is command-driven and dependency-free; it does not claim LSP
   compatibility.
+- Python qualified names begin with their repository-relative module and use `::` for lexical
+  scopes. Python imports reuse existing dependency records and graph contracts.
+- C and C++ share one call-resolution family; Python is isolated unless future explicit
+  cross-language evidence is introduced.
+- Python support reuses schema v4 and version-1 public/query/graph/editor contracts.
 
-Detailed decisions are recorded in [`docs/adr/`](docs/adr/), currently ADRs 0001–0011.
+Detailed decisions are recorded in [`docs/adr/`](docs/adr/), currently ADRs 0001–0012.
 
 ## Known technical debt and limitations
 
@@ -123,7 +132,11 @@ Detailed decisions are recorded in [`docs/adr/`](docs/adr/), currently ADRs 0001
   types, overload resolution, templates, macros, conditionals, linkage, and virtual dispatch.
 - Member-call and include resolution is intentionally conservative; external/system includes can
   remain unresolved.
-- Only C and C++ are supported.
+- Python analysis does not model import aliases, installed modules, environment-dependent paths,
+  namespace-package configuration, decorators, inferred receiver types, monkey patching, or
+  runtime dispatch. Attribute calls are conservatively name-based.
+- `.pyi` symbols are syntax-level definitions; repositories containing matching `.py` and `.pyi`
+  modules can produce deliberate ambiguity.
 - Incremental scans still read and fingerprint every supported file, rebuild all relationships, and
   write a complete replacement snapshot.
 - Query services load immutable graph snapshots into memory; large-repository scaling has not yet
@@ -159,14 +172,16 @@ See [`docs/limitations.md`](docs/limitations.md) and
 ## Testing and CI status
 
 - Local verification: `cmake --build --preset dev` and
-  `ctest --preset dev --output-on-failure` passed 81/81 tests on 2026-07-01.
+  `ctest --preset dev --output-on-failure` passed 90/90 tests on 2026-07-01.
 - Coverage includes unit, integration, CLI, migration, ambiguity, deterministic output,
   incremental reuse, deletion, relationship re-resolution, rollback behavior, public API behavior,
   plugin registration/order/failure semantics, build-tree consumption, and installed-package
-  consumption. Server framing/lifecycle/cancellation, process execution, Node transport, and
-  Node-to-server integration are also covered.
+  consumption. Python coverage includes scanning, symbols/signatures, calls, imports, diagnostics,
+  stubs, mixed-language isolation, incremental cache reuse, CLI JSON, and editor-server queries.
+  Server framing/lifecycle/cancellation, process execution, Node transport, and Node-to-server
+  integration are also covered.
 - Latest feature CI: GitHub Actions run
-  [`#34`](https://github.com/sre0089/sherpa/actions/runs/28498265747) completed successfully for:
+  [`#36`](https://github.com/sre0089/sherpa/actions/runs/28520027618) completed successfully for:
   - `ubuntu-latest`
   - `macos-latest`
   - `windows-2022`
@@ -179,6 +194,6 @@ The roadmap is provisional; approve and complete one milestone at a time.
 12. Public API foundation — complete.
 13. Plugin and extensibility model — complete.
 14. Editor/VS Code integration foundation — complete.
-15. Additional language support.
+15. Additional language support — complete (Python).
 16. Packaging and release hardening for GitHub, Homebrew, and PyPI.
 17. LLM and assistant integration.
