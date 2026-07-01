@@ -30,6 +30,17 @@ std::vector<sherpa::IndexedFile> relationship_fixture() {
   return files;
 }
 
+std::vector<sherpa::IndexedFile> python_fixture() {
+  const auto root = std::filesystem::path(SHERPA_SOURCE_DIR) / "tests" / "fixtures" / "python";
+  const auto scan = sherpa::RepositoryScanner{}.scan(root);
+  sherpa::TreeSitterFrontend frontend;
+  std::vector<sherpa::IndexedFile> files;
+  for (const auto& file : scan.files) {
+    files.push_back({.file = file, .analysis = frontend.analyze(file)});
+  }
+  return files;
+}
+
 const sherpa::RelationshipRecord* find_relationship(
     const std::vector<sherpa::RelationshipRecord>& relationships, sherpa::RelationshipKind kind,
     const std::string& source_file, const std::string& target_text) {
@@ -110,4 +121,41 @@ TEST_CASE("resolver emits deterministic file definition relationships") {
   CHECK(run->resolution == sherpa::ResolutionStatus::kResolved);
   CHECK(run->confidence == sherpa::Confidence::kHigh);
   REQUIRE(run->target_symbol.has_value());
+}
+
+TEST_CASE("resolver resolves local Python imports and preserves external imports") {
+  const auto relationships = sherpa::RelationshipResolver{}.resolve(python_fixture());
+
+  const auto* local = find_relationship(relationships, sherpa::RelationshipKind::kIncludes,
+                                        "app/main.py", ".service");
+  REQUIRE(local != nullptr);
+  CHECK(local->resolution == sherpa::ResolutionStatus::kResolved);
+  REQUIRE(local->target_file_path.has_value());
+  CHECK(*local->target_file_path == "app/service.py");
+  CHECK(local->provenance == "python-import:module-match");
+
+  const auto* external = find_relationship(relationships, sherpa::RelationshipKind::kIncludes,
+                                           "app/main.py", "external_package");
+  REQUIRE(external != nullptr);
+  CHECK(external->resolution == sherpa::ResolutionStatus::kUnresolved);
+  CHECK(external->provenance == "python-import:no-match");
+}
+
+TEST_CASE("resolver isolates Python calls from C and C++ definitions") {
+  const auto relationships = sherpa::RelationshipResolver{}.resolve(python_fixture());
+
+  const auto* helper = find_relationship(relationships, sherpa::RelationshipKind::kCalls,
+                                         "app/service.py", "helper");
+  REQUIRE(helper != nullptr);
+  CHECK(helper->resolution == sherpa::ResolutionStatus::kResolved);
+  REQUIRE(helper->target_symbol.has_value());
+  CHECK(helper->target_symbol->file_path == "app/utils.py");
+  CHECK(helper->target_symbol->qualified_name == "app.utils::helper");
+
+  const auto* process = find_relationship(relationships, sherpa::RelationshipKind::kCalls,
+                                          "app/service.py", "process");
+  REQUIRE(process != nullptr);
+  CHECK(process->resolution == sherpa::ResolutionStatus::kResolved);
+  REQUIRE(process->target_symbol.has_value());
+  CHECK(process->target_symbol->qualified_name == "app.service::Service::process");
 }

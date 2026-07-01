@@ -29,8 +29,7 @@ enum class ExitCode {
   kInternalFailure = 10,
 };
 
-void write_query_error(const std::string& format, std::string_view code,
-                       std::string_view message,
+void write_query_error(const std::string& format, std::string_view code, std::string_view message,
                        const std::vector<sherpa::QuerySymbol>& candidates = {}) {
   if (format == "json") {
     sherpa::write_query_error_json(std::cout, code, message, candidates);
@@ -50,8 +49,7 @@ bool requests_json_output(int argc, char** argv) {
     if (argument == "--format=json") {
       return true;
     }
-    if (argument == "--format" && index + 1 < argc &&
-        std::string_view{argv[index + 1]} == "json") {
+    if (argument == "--format" && index + 1 < argc && std::string_view{argv[index + 1]} == "json") {
       return true;
     }
   }
@@ -77,12 +75,10 @@ int handle_api_error(const sherpa::api::Error& error, const std::string& format,
       write_query_error(format, "ambiguous_symbol", error.what(), error.candidates());
       return static_cast<int>(ExitCode::kAmbiguousSymbol);
     case sherpa::api::ErrorCode::kPluginFailure:
-      write_query_error(format, "internal_failure",
-                        std::string(internal_context) + error.what());
+      write_query_error(format, "internal_failure", std::string(internal_context) + error.what());
       return static_cast<int>(ExitCode::kInternalFailure);
     case sherpa::api::ErrorCode::kInternalFailure:
-      write_query_error(format, "internal_failure",
-                        std::string(internal_context) + error.what());
+      write_query_error(format, "internal_failure", std::string(internal_context) + error.what());
       return static_cast<int>(ExitCode::kInternalFailure);
   }
   return static_cast<int>(ExitCode::kInternalFailure);
@@ -112,8 +108,7 @@ int run_query(sherpa::CallQueryDirection direction, const std::string& symbol,
 }
 
 int run_symbol_query(const std::string& symbol, const std::string& signature,
-                     const std::string& file_path,
-                     const std::filesystem::path& repository_path,
+                     const std::string& file_path, const std::filesystem::path& repository_path,
                      const std::filesystem::path& database_path, const std::string& format) {
   try {
     const auto result = sherpa::api::Client{}.symbol({
@@ -178,12 +173,8 @@ int run_path(const std::string& source, const std::string& target,
   try {
     const auto result = sherpa::api::Client{}.path({
         .repository = {.path = repository_path, .database_path = database_path},
-        .source = {.name = source,
-                   .signature = source_signature,
-                   .file_path = source_file_path},
-        .target = {.name = target,
-                   .signature = target_signature,
-                   .file_path = target_file_path},
+        .source = {.name = source, .signature = source_signature, .file_path = source_file_path},
+        .target = {.name = target, .signature = target_signature, .file_path = target_file_path},
     });
     if (format == "json") {
       sherpa::write_path_json(std::cout, result);
@@ -257,13 +248,14 @@ int main(int argc, char** argv) {
       ->check(CLI::IsMember({"text", "json"}));
   auto* query_callers_command =
       query_command->add_subcommand("callers", "Find functions that call a symbol");
-  query_callers_command->add_option("symbol", callers_symbol,
-                                    "Qualified or unqualified symbol name")
+  query_callers_command
+      ->add_option("symbol", callers_symbol, "Qualified or unqualified symbol name")
       ->required();
   query_callers_command->add_option("--signature", callers_signature, "Exact displayed signature");
   query_callers_command->add_option("--file", callers_file, "File containing the definition");
   query_callers_command->add_option("--repo", callers_repository, "Indexed repository path");
-  query_callers_command->add_option("--database", callers_database, "Explicit SQLite database path");
+  query_callers_command->add_option("--database", callers_database,
+                                    "Explicit SQLite database path");
   query_callers_command->add_option("--format", callers_format, "Output format: text or json")
       ->check(CLI::IsMember({"text", "json"}));
 
@@ -284,13 +276,14 @@ int main(int argc, char** argv) {
       ->check(CLI::IsMember({"text", "json"}));
   auto* query_callees_command =
       query_command->add_subcommand("callees", "Find functions called by a symbol");
-  query_callees_command->add_option("symbol", callees_symbol,
-                                    "Qualified or unqualified symbol name")
+  query_callees_command
+      ->add_option("symbol", callees_symbol, "Qualified or unqualified symbol name")
       ->required();
   query_callees_command->add_option("--signature", callees_signature, "Exact displayed signature");
   query_callees_command->add_option("--file", callees_file, "File containing the definition");
   query_callees_command->add_option("--repo", callees_repository, "Indexed repository path");
-  query_callees_command->add_option("--database", callees_database, "Explicit SQLite database path");
+  query_callees_command->add_option("--database", callees_database,
+                                    "Explicit SQLite database path");
   query_callees_command->add_option("--format", callees_format, "Output format: text or json")
       ->check(CLI::IsMember({"text", "json"}));
 
@@ -302,13 +295,12 @@ int main(int argc, char** argv) {
   std::string query_symbol_format{"text"};
   auto* query_symbol_command =
       query_command->add_subcommand("symbol", "Show symbol metadata and direct call counts");
-  query_symbol_command->add_option("symbol", query_symbol_name,
-                                   "Qualified or unqualified symbol name")
+  query_symbol_command
+      ->add_option("symbol", query_symbol_name, "Qualified or unqualified symbol name")
       ->required();
   query_symbol_command->add_option("--signature", query_symbol_signature,
                                    "Exact displayed signature");
-  query_symbol_command->add_option("--file", query_symbol_file,
-                                   "File containing the definition");
+  query_symbol_command->add_option("--file", query_symbol_file, "File containing the definition");
   query_symbol_command->add_option("--repo", query_symbol_repository, "Indexed repository path");
   query_symbol_command->add_option("--database", query_symbol_database,
                                    "Explicit SQLite database path");
@@ -399,14 +391,13 @@ int main(int argc, char** argv) {
   if (*index_command) {
     try {
       const auto result = sherpa::api::Client{}.index({
-        .repository_path = repository_path,
-        .database_path = database_path,
+          .repository_path = repository_path,
+          .database_path = database_path,
       });
 
-      std::cout << "Indexed " << result.indexed_files << " C/C++ files ("
-                << result.added_files << " added, " << result.modified_files << " modified, "
-                << result.unchanged_files << " unchanged, " << result.deleted_files
-                << " deleted)\n"
+      std::cout << "Indexed " << result.indexed_files << " source files (" << result.added_files
+                << " added, " << result.modified_files << " modified, " << result.unchanged_files
+                << " unchanged, " << result.deleted_files << " deleted)\n"
                 << "Parsed: " << result.parsed_files << ", reused: " << result.unchanged_files
                 << '\n'
                 << "Symbols: " << result.extracted_symbols << '\n'

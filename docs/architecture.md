@@ -21,10 +21,12 @@ through the public client, and reuses existing query JSON contracts. This proces
 editors independent from Sherpa's C++ ABI and SQLite format.
 
 The index application service scans and fingerprints files, reuses complete cached analysis for
-unchanged files, and dispatches added or modified files to the built-in tree-sitter C/C++ frontend.
+unchanged files, and dispatches added or modified files by recorded language to built-in
+tree-sitter C/C++ and Python extractors behind one frontend facade.
 The relationship resolver rebuilds file-to-symbol definitions, symbol-to-symbol calls, and
-file-to-file includes across the combined analysis with evidence, confidence, provenance, and
-retained ambiguity. The new snapshot is published atomically.
+file-to-file includes/imports across the combined analysis with evidence, confidence, provenance,
+and retained ambiguity. Call candidates are partitioned into C-family and Python language families
+so identical names cannot create cross-language edges. The new snapshot is published atomically.
 
 All symbol-based application services use one shared selector over the immutable graph snapshot.
 It applies deterministic exact qualified-name or short-name rules, then optional exact signature

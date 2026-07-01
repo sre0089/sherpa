@@ -1,15 +1,13 @@
 #include <catch2/catch_test_macros.hpp>
-
 #include <chrono>
 #include <cstddef>
 #include <filesystem>
+#include <nlohmann/json.hpp>
 #include <sstream>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
-
-#include <nlohmann/json.hpp>
 
 #include "server/json_rpc_server.hpp"
 
@@ -49,8 +47,8 @@ std::vector<Json> parse_messages(std::string_view output) {
     const auto header = output.substr(0, header_end);
     constexpr std::string_view prefix{"Content-Length: "};
     REQUIRE(header.starts_with(prefix));
-    const auto length = static_cast<std::size_t>(
-        std::stoull(std::string(header.substr(prefix.size()))));
+    const auto length =
+        static_cast<std::size_t>(std::stoull(std::string(header.substr(prefix.size()))));
     output.remove_prefix(header_end + 4);
     REQUIRE(output.size() >= length);
     messages.push_back(Json::parse(output.substr(0, length)));
@@ -83,13 +81,12 @@ TEST_CASE("server enforces initialization and reports protocol capabilities") {
   std::stringstream input;
   std::stringstream output;
   input << frame(request(1, "query/symbol", {{"name", "missing"}}))
-        << frame(request(2,
-                         "initialize",
-                         {
-                             {"repository_path", temporary.path().generic_string()},
-                             {"database_path",
-                              (temporary.path() / "server.sqlite").generic_string()},
-                         }))
+        << frame(
+               request(2, "initialize",
+                       {
+                           {"repository_path", temporary.path().generic_string()},
+                           {"database_path", (temporary.path() / "server.sqlite").generic_string()},
+                       }))
         << frame(request(3, "workspace/status")) << frame(request(4, "shutdown"))
         << frame(notification("exit"));
 
@@ -112,16 +109,15 @@ TEST_CASE("server indexes and returns existing query JSON contracts") {
   const auto database = temporary.path() / "server-query.sqlite";
   std::stringstream input;
   std::stringstream output;
-  input << frame(request(1,
-                         "initialize",
+  input << frame(request(1, "initialize",
                          {
                              {"repository_path", repository.generic_string()},
                              {"database_path", database.generic_string()},
                          }))
         << frame(request(2, "workspace/index"))
-        << frame(request(3, "query/symbol", {{"name", "run"}}))
-        << frame(request(4, "graph/get")) << frame(request(5, "unknown/method"))
-        << frame(request(6, "shutdown")) << frame(notification("exit"));
+        << frame(request(3, "query/symbol", {{"name", "run"}})) << frame(request(4, "graph/get"))
+        << frame(request(5, "unknown/method")) << frame(request(6, "shutdown"))
+        << frame(notification("exit"));
 
   const auto exit_code = sherpa::server::JsonRpcServer{}.run(input, output);
   const auto messages = parse_messages(output.str());
@@ -138,6 +134,31 @@ TEST_CASE("server indexes and returns existing query JSON contracts") {
   REQUIRE(messages[5]["result"].is_null());
 }
 
+TEST_CASE("server indexes and queries Python through unchanged protocol contracts") {
+  TemporaryDirectory temporary;
+  const auto repository =
+      std::filesystem::path(SHERPA_SOURCE_DIR) / "tests" / "fixtures" / "python";
+  const auto database = temporary.path() / "server-python.sqlite";
+  std::stringstream input;
+  std::stringstream output;
+  input << frame(request(1, "initialize",
+                         {
+                             {"repository_path", repository.generic_string()},
+                             {"database_path", database.generic_string()},
+                         }))
+        << frame(request(2, "workspace/index"))
+        << frame(request(3, "query/symbol", {{"name", "app.utils::helper"}}))
+        << frame(request(4, "shutdown")) << frame(notification("exit"));
+
+  REQUIRE(sherpa::server::JsonRpcServer{}.run(input, output) == 0);
+  const auto messages = parse_messages(output.str());
+  REQUIRE(messages.size() == 4);
+  CHECK(messages[1]["result"]["indexed_files"] == 6);
+  CHECK(messages[2]["result"]["schema_version"] == 1);
+  CHECK(messages[2]["result"]["symbol"]["qualified_name"] == "app.utils::helper");
+  CHECK(messages[2]["result"]["symbol"]["file"] == "app/utils.py");
+}
+
 TEST_CASE("server cancels queued requests by JSON-RPC id") {
   TemporaryDirectory temporary;
   const auto repository =
@@ -145,16 +166,15 @@ TEST_CASE("server cancels queued requests by JSON-RPC id") {
   const auto database = temporary.path() / "server-cancel.sqlite";
   std::stringstream input;
   std::stringstream output;
-  input << frame(request(1,
-                         "initialize",
+  input << frame(request(1, "initialize",
                          {
                              {"repository_path", repository.generic_string()},
                              {"database_path", database.generic_string()},
                          }))
         << frame(request(2, "workspace/index"))
         << frame(request(3, "query/symbol", {{"name", "run"}}))
-        << frame(notification("$/cancelRequest", {{"id", 3}}))
-        << frame(request(4, "shutdown")) << frame(notification("exit"));
+        << frame(notification("$/cancelRequest", {{"id", 3}})) << frame(request(4, "shutdown"))
+        << frame(notification("exit"));
 
   REQUIRE(sherpa::server::JsonRpcServer{}.run(input, output) == 0);
   const auto messages = parse_messages(output.str());

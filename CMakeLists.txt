@@ -31,6 +31,7 @@ find_package(Threads REQUIRED)
 find_package(unofficial-tree-sitter CONFIG REQUIRED)
 find_package(tree-sitter-c CONFIG REQUIRED)
 find_package(tree-sitter-cpp CONFIG REQUIRED)
+find_package(tree-sitter-python CONFIG REQUIRED)
 
 if(TARGET SQLite3::SQLite3)
   set(SHERPA_SQLITE_TARGET SQLite3::SQLite3)
@@ -129,6 +130,7 @@ target_link_libraries(
     unofficial::tree-sitter::tree-sitter
     tree-sitter::tree-sitter-c
     tree-sitter::tree-sitter-cpp
+    tree-sitter::tree-sitter-python
 )
 sherpa_enable_warnings(sherpa_core)
 
@@ -343,6 +345,15 @@ if(BUILD_TESTING)
       -DDATABASE_PATH=${CMAKE_CURRENT_BINARY_DIR}/cli-export.sqlite
       -DOUTPUT_PATH=${CMAKE_CURRENT_BINARY_DIR}/graph-export.json
       -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/export.cmake
+  )
+  add_test(
+    NAME cli_python
+    COMMAND
+      "${CMAKE_COMMAND}"
+      -DSHERPA_EXECUTABLE=$<TARGET_FILE:sherpa>
+      -DFIXTURE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/python
+      -DDATABASE_PATH=${CMAKE_CURRENT_BINARY_DIR}/cli-python.sqlite
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/python.cmake
   )
 
   find_program(SHERPA_NODE_EXECUTABLE NAMES node nodejs)

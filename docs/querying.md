@@ -5,6 +5,7 @@ Index a repository before querying it:
 ```sh
 sherpa index /path/to/repository
 sherpa query symbol namespace::function --repo /path/to/repository
+sherpa query symbol package.module::Class::method --repo /path/to/repository
 sherpa query symbol overloaded --signature 'overloaded(int value)' --repo /path/to/repository
 sherpa query callers helper --file src/helpers.cpp --repo /path/to/repository
 sherpa query file src/component.cpp --repo /path/to/repository
@@ -44,6 +45,11 @@ can be combined.
 `--target-file` options. Filters that match no definition return the normal not-found error.
 Remaining ambiguity candidates are ordered deterministically by qualified name, file, source
 position, and signature.
+
+Python symbols use the repository-relative module as the first qualified scope, with dots inside
+the module and `::` before lexical scopes: `package.module::function` or
+`package.module::Class::method`. Short-name lookup remains available but can be ambiguous in mixed
+repositories.
 
 ## Results
 

@@ -11,7 +11,7 @@ if(NOT result EQUAL 0)
   message(FATAL_ERROR "sherpa index failed (${result}): ${error}")
 endif()
 
-if(NOT output MATCHES "Indexed 3 C/C\\+\\+ files")
+if(NOT output MATCHES "Indexed 3 source files")
   message(FATAL_ERROR "unexpected output: ${output}")
 endif()
 

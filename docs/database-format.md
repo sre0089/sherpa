@@ -13,6 +13,10 @@ are reparsed once because they do not contain raw call sites.
 Graph queries open the database read-only and require schema version 4. They never create or migrate
 an index; indexing remains the only write path.
 
+The existing `files.language` value distinguishes `c`, `cpp`, and `python`. Python imports reuse
+the language-neutral include-directive and relationship records, so Python support does not require
+a schema migration or public-contract version change.
+
 The `content_fingerprint` column currently uses FNV-1a 64-bit for change detection. Every supported
 file is read to calculate it during a scan; it is not a cryptographic integrity check.
 

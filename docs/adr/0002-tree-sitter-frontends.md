@@ -6,8 +6,9 @@ Accepted
 
 ## Decision
 
-Sherpa uses the tree-sitter C API with pinned C and C++ grammars. Grammar packages are maintained as
-small vcpkg overlay ports that verify upstream archives and export stable CMake targets.
+Sherpa uses the tree-sitter C API with pinned C, C++, and Python grammars. Grammar packages are
+maintained as small vcpkg overlay ports that verify upstream archives and export stable CMake
+targets. Language-specific extractors are selected behind one frontend facade.
 
 ## Consequences
 

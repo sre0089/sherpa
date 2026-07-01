@@ -1,7 +1,8 @@
 # Indexing
 
 Run `sherpa index <repository>` to create or refresh the local index. The first run parses every
-supported C and C++ file. Later runs compare content fingerprints with the active snapshot:
+supported C, C++, and Python file. Later runs compare content fingerprints with the active
+snapshot:
 
 - unchanged files reuse stored symbols, includes, call sites, and diagnostics;
 - added and modified files are parsed;
@@ -20,3 +21,8 @@ observe a partial update.
 Sherpa currently fingerprints file contents during every scan and rewrites the completed snapshot,
 even when all files are unchanged. See the [index benchmark](../benchmarks/README.md) for the
 reproducible baseline used to evaluate future optimizations.
+
+Python qualified names begin with the repository-relative module name, followed by lexical scopes
+using Sherpa's existing `::` separator. For example, `app/service.py` produces
+`app.service::Service::process`. Package `__init__.py` files use the package name. This keeps mixed
+repositories deterministic without changing query or graph contracts.

@@ -3,10 +3,11 @@
 Sherpa is a local-first codebase intelligence tool. It will turn source code into an
 evidence-backed graph of files, symbols, and relationships.
 
-The project is under active development. Sherpa indexes C and C++ files and uses tree-sitter to
-extract functions, methods, classes, structs, include directives, source locations, and parser
-diagnostics into a local SQLite database. It also records evidence-backed `defines`, `calls`, and
-`includes` relationships while preserving ambiguous and unresolved references.
+The project is under active development. Sherpa indexes C, C++, and Python files and uses
+tree-sitter to extract functions, methods, classes, structs, includes/imports, calls, source
+locations, and parser diagnostics into a local SQLite database. It records evidence-backed
+`defines`, `calls`, and `includes` relationships while preserving ambiguous and unresolved
+references.
 
 ## Build
 
@@ -56,11 +57,11 @@ platform cache location, and `--format json` for machine-readable output. See
 
 ## Status
 
-Sherpa currently discovers `.c`, `.cc`, `.cpp`, `.cxx`, `.h`, `.hh`, `.hpp`, `.hxx`, and `.inc`
-files. It performs syntax-based analysis only: overload resolution, types,
-preprocessor expansion, and compiler-accurate semantics are not implemented. Call and include
-resolution is intentionally conservative and every result carries status, confidence, and
-provenance.
+Sherpa currently discovers `.c`, `.cc`, `.cpp`, `.cxx`, `.h`, `.hh`, `.hpp`, `.hxx`, `.inc`,
+`.py`, and `.pyi` files. It performs syntax-based analysis only: overload resolution, type
+inference, dynamic dispatch, preprocessor expansion, and compiler/interpreter-accurate semantics
+are not implemented. Call and dependency resolution is intentionally conservative and every result
+carries status, confidence, and provenance.
 
 ## License
 

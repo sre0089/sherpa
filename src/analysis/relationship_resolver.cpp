@@ -29,6 +29,8 @@ struct IncludeResolution {
   std::string method{"no-match"};
 };
 
+using SymbolKey = std::pair<std::string, std::string>;
+
 SymbolReference reference(const SymbolInfo& info) {
   return SymbolReference{
       .file_path = info.file->file.relative_path,
@@ -83,28 +85,33 @@ std::vector<std::string> scope_candidates(std::string caller, std::string_view c
 }
 
 std::vector<SymbolInfo> find_qualified(
-    const std::map<std::string, std::vector<SymbolInfo>>& by_qualified,
-    const std::string& qualified_name) {
-  const auto found = by_qualified.find(qualified_name);
+    const std::map<SymbolKey, std::vector<SymbolInfo>>& by_qualified,
+    const std::string& language_family, const std::string& qualified_name) {
+  const auto found = by_qualified.find({language_family, qualified_name});
   return found == by_qualified.end() ? std::vector<SymbolInfo>{} : found->second;
 }
 
+std::string language_family(std::string_view language) {
+  return language == "python" ? "python" : "c-family";
+}
+
 CallResolution resolve_call_candidates(
-    const CallSiteRecord& call, const std::map<std::string, std::vector<SymbolInfo>>& by_qualified,
-    const std::map<std::string, std::vector<SymbolInfo>>& by_name) {
+    const CallSiteRecord& call, const std::string& family,
+    const std::map<SymbolKey, std::vector<SymbolInfo>>& by_qualified,
+    const std::map<SymbolKey, std::vector<SymbolInfo>>& by_name) {
   if (call.form == CallForm::kIndirect) {
     return {};
   }
 
   const std::string callee_text = strip_template_arguments(call.callee_text);
   if (call.form == CallForm::kQualified) {
-    if (auto matches = find_qualified(by_qualified, callee_text); !matches.empty()) {
+    if (auto matches = find_qualified(by_qualified, family, callee_text); !matches.empty()) {
       return {.matches = std::move(matches),
               .confidence = Confidence::kHigh,
               .method = "qualified-name-match"};
     }
     for (const auto& candidate : scope_candidates(call.caller_qualified_name, callee_text)) {
-      if (auto matches = find_qualified(by_qualified, candidate); !matches.empty()) {
+      if (auto matches = find_qualified(by_qualified, family, candidate); !matches.empty()) {
         return {.matches = std::move(matches),
                 .confidence = Confidence::kHigh,
                 .method = "scoped-qualified-match"};
@@ -112,7 +119,7 @@ CallResolution resolve_call_candidates(
     }
   } else if (call.form == CallForm::kUnqualified) {
     for (const auto& candidate : scope_candidates(call.caller_qualified_name, call.callee_name)) {
-      if (auto matches = find_qualified(by_qualified, candidate); !matches.empty()) {
+      if (auto matches = find_qualified(by_qualified, family, candidate); !matches.empty()) {
         return {.matches = std::move(matches),
                 .confidence = Confidence::kHigh,
                 .method = "lexical-scope-match"};
@@ -120,7 +127,7 @@ CallResolution resolve_call_candidates(
     }
   }
 
-  const auto found = by_name.find(call.callee_name);
+  const auto found = by_name.find({family, call.callee_name});
   if (found == by_name.end()) {
     return {};
   }
@@ -142,8 +149,71 @@ bool has_path_suffix(std::string_view path, std::string_view suffix) {
   return path.size() == suffix.size() || path[path.size() - suffix.size() - 1U] == '/';
 }
 
-IncludeResolution resolve_include(const IndexedFile& source, const IncludeRecord& include,
-                                  const std::map<std::string, const IndexedFile*>& files) {
+std::string python_module_for_path(std::string path) {
+  const auto extension = path.rfind('.');
+  if (extension != std::string::npos) {
+    path.erase(extension);
+  }
+  std::ranges::replace(path, '/', '.');
+  if (path == "__init__") {
+    return {};
+  }
+  constexpr std::string_view init_suffix = ".__init__";
+  if (path.ends_with(init_suffix)) {
+    path.erase(path.size() - init_suffix.size());
+  }
+  return path;
+}
+
+std::string python_import_module(const IndexedFile& source, std::string target) {
+  const auto first_name = target.find_first_not_of('.');
+  const std::size_t level = first_name == std::string::npos ? target.size() : first_name;
+  if (level == 0U) {
+    return target;
+  }
+
+  std::string package = python_module_for_path(source.file.relative_path);
+  const auto filename = std::filesystem::path(source.file.relative_path).filename().string();
+  if (filename != "__init__.py" && filename != "__init__.pyi") {
+    const auto separator = package.rfind('.');
+    package = separator == std::string::npos ? std::string{} : package.substr(0, separator);
+  }
+  for (std::size_t parent = 1U; parent < level; ++parent) {
+    const auto separator = package.rfind('.');
+    if (separator == std::string::npos) {
+      package.clear();
+      break;
+    }
+    package.erase(separator);
+  }
+  const std::string remainder =
+      first_name == std::string::npos ? std::string{} : target.substr(first_name);
+  if (package.empty()) {
+    return remainder;
+  }
+  return remainder.empty() ? package : package + "." + remainder;
+}
+
+IncludeResolution resolve_python_import(
+    const IndexedFile& source, const IncludeRecord& include,
+    const std::map<std::string, std::vector<std::string>>& files_by_module) {
+  const std::string module = python_import_module(source, include.target);
+  const auto found = files_by_module.find(module);
+  if (found == files_by_module.end()) {
+    return {.matches = {}, .confidence = Confidence::kLow, .method = "python-import:no-match"};
+  }
+  return {.matches = found->second,
+          .confidence = found->second.size() == 1U ? Confidence::kHigh : Confidence::kLow,
+          .method = "python-import:module-match"};
+}
+
+IncludeResolution resolve_include(
+    const IndexedFile& source, const IncludeRecord& include,
+    const std::map<std::string, const IndexedFile*>& files,
+    const std::map<std::string, std::vector<std::string>>& python_files_by_module) {
+  if (source.file.language == "python") {
+    return resolve_python_import(source, include, python_files_by_module);
+  }
   if (include.is_system) {
     return {.matches = {}, .confidence = Confidence::kLow, .method = "system-include"};
   }
@@ -191,12 +261,18 @@ RelationshipCandidate symbol_candidate(const SymbolInfo& info, std::uint32_t ran
 std::vector<RelationshipRecord> RelationshipResolver::resolve(
     const std::vector<IndexedFile>& files) const {
   std::map<std::string, const IndexedFile*> files_by_path;
-  std::map<std::string, std::vector<SymbolInfo>> definitions_by_qualified;
-  std::map<std::string, std::vector<SymbolInfo>> definitions_by_name;
+  std::map<std::string, std::vector<std::string>> python_files_by_module;
+  std::map<SymbolKey, std::vector<SymbolInfo>> definitions_by_qualified;
+  std::map<SymbolKey, std::vector<SymbolInfo>> definitions_by_name;
   std::map<std::tuple<std::string, std::string, std::uint32_t>, SymbolInfo> definitions_by_source;
 
   for (const auto& file : files) {
     files_by_path.emplace(file.file.relative_path, &file);
+    if (file.file.language == "python") {
+      python_files_by_module[python_module_for_path(file.file.relative_path)].push_back(
+          file.file.relative_path);
+    }
+    const std::string family = language_family(file.file.language);
     for (const auto& symbol : file.analysis.symbols) {
       if (symbol.role == SymbolRole::kDefinition) {
         const SymbolInfo info{.file = &file, .symbol = &symbol};
@@ -204,8 +280,8 @@ std::vector<RelationshipRecord> RelationshipResolver::resolve(
             std::tuple(file.file.relative_path, symbol.qualified_name, symbol.range.start_byte),
             info);
         if (is_callable_definition(symbol)) {
-          definitions_by_qualified[symbol.qualified_name].push_back(info);
-          definitions_by_name[symbol.name].push_back(info);
+          definitions_by_qualified[{family, symbol.qualified_name}].push_back(info);
+          definitions_by_name[{family, symbol.name}].push_back(info);
         }
       }
     }
@@ -249,7 +325,8 @@ std::vector<RelationshipRecord> RelationshipResolver::resolve(
     }
 
     for (const auto& include : file.analysis.includes) {
-      auto include_resolution = resolve_include(file, include, files_by_path);
+      auto include_resolution =
+          resolve_include(file, include, files_by_path, python_files_by_module);
       RelationshipRecord relationship{
           .kind = RelationshipKind::kIncludes,
           .source_file_path = file.file.relative_path,
@@ -275,7 +352,8 @@ std::vector<RelationshipRecord> RelationshipResolver::resolve(
           relationship.candidates.push_back(RelationshipCandidate{
               .target_file_path = std::move(candidate),
               .target_symbol = std::nullopt,
-              .reason = "repository path suffix match",
+              .reason = file.file.language == "python" ? "matching Python module"
+                                                       : "repository path suffix match",
               .rank = rank++,
           });
         }
@@ -287,8 +365,8 @@ std::vector<RelationshipRecord> RelationshipResolver::resolve(
       const auto caller_key =
           std::tuple(file.file.relative_path, call.caller_qualified_name, call.caller_start_byte);
       const auto caller = definitions_by_source.find(caller_key);
-      const auto call_resolution =
-          resolve_call_candidates(call, definitions_by_qualified, definitions_by_name);
+      const auto call_resolution = resolve_call_candidates(
+          call, language_family(file.file.language), definitions_by_qualified, definitions_by_name);
       RelationshipRecord relationship{
           .kind = RelationshipKind::kCalls,
           .source_file_path = file.file.relative_path,

@@ -1,7 +1,7 @@
 # Analysis limitations
 
-Sherpa's current C/C++ frontend uses tree-sitter and reports syntactic evidence. It does not run a
-preprocessor or compiler.
+Sherpa's C/C++ and Python frontends use tree-sitter and report syntactic evidence. They do not run a
+preprocessor, compiler, or Python interpreter.
 
 The public C++ API is source-versioned but does not provide binary compatibility. Sherpa currently
 installs a static library, exposes C++ standard-library types, and requires consumers to rebuild
@@ -23,6 +23,14 @@ Current results therefore do not resolve:
 - types, linkage, or virtual dispatch;
 - compiler-accurate function calls or include search paths.
 
+Python analysis extracts functions, async functions, classes, methods, displayed signatures,
+calls, imports, ranges, and parser diagnostics. Local absolute and relative imports resolve against
+repository module paths. Sherpa does not model environment-dependent `sys.path`, installed
+packages, namespace-package configuration, import aliases, decorators, inferred receiver types,
+monkey patching, or runtime dispatch. Attribute calls therefore use conservative name matching
+unless `self` or `cls` provides an exact lexical method scope. `.pyi` files are indexed as
+syntax-level definitions; a matching `.py` and `.pyi` module can create deliberate ambiguity.
+
 Malformed files are indexed when possible. Parser errors are retained as diagnostics alongside any
 symbols that could still be extracted.
 
@@ -35,7 +43,9 @@ names. Member calls without type information are low confidence. Overloads remai
 syntax alone cannot select one definition. Quoted includes use relative, repository-root, or unique
 suffix matching; system includes remain unresolved.
 
-`callers` and `callees` select definitions by exact qualified name first and exact short name
+Call resolution is restricted to the source language family: C and C++ can resolve together, while
+Python never resolves to C/C++ merely because a name matches. `callers` and `callees` select
+definitions by exact qualified name first and exact short name
 second. A query that matches multiple definitions, including overloads, fails with a candidate list
 instead of choosing arbitrarily. Exact displayed signatures and definition files can disambiguate
 queries. Sherpa does not currently normalize equivalent C++ type spellings, omit parameter names,
@@ -52,7 +62,7 @@ possible route. It returns one deterministic shortest path, with fully resolved 
 over paths containing ambiguity.
 
 `export` currently emits file nodes, definition symbol nodes, and `defines`, `calls`, and
-`includes` edges only. It does not expose source text, diagnostics, declarations without
-definitions, or non-C/C++ language constructs. Export identifiers are stable for unchanged indexed
-content, but they are not intended to preserve identity across substantive symbol movement or future
-schema versions.
+`includes` edges only. Python imports use `includes` edges to preserve the version-1 graph
+contract. Export does not expose source text, diagnostics, or declarations without definitions.
+Identifiers are stable for unchanged indexed content, but they are not intended to preserve
+identity across substantive symbol movement or future schema versions.

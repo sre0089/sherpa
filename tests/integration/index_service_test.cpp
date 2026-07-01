@@ -94,6 +94,39 @@ TEST_CASE("index service stores one active deterministic file index") {
   sqlite3_close(database);
 }
 
+TEST_CASE("index service persists and reuses mixed C++ and Python analysis") {
+  TemporaryDirectory temporary;
+  const auto database_path = temporary.path() / "python.sqlite";
+  const auto fixture = std::filesystem::path(SHERPA_SOURCE_DIR) / "tests" / "fixtures" / "python";
+
+  sherpa::IndexService service;
+  const auto first = service.index({fixture, database_path});
+  const auto second = service.index({fixture, database_path});
+
+  REQUIRE(first.indexed_files == 6);
+  REQUIRE(first.added_files == 6);
+  REQUIRE(first.parsed_files == 6);
+  REQUIRE(first.extracted_symbols == 8);
+  REQUIRE(first.extracted_includes == 5);
+  REQUIRE(first.relationships == 19);
+  REQUIRE(first.resolved_relationships == 17);
+  REQUIRE(first.unresolved_relationships == 2);
+  REQUIRE(second.unchanged_files == 6);
+  REQUIRE(second.parsed_files == 0);
+  REQUIRE(second.relationships == first.relationships);
+
+  sqlite3* database = nullptr;
+  REQUIRE(sqlite3_open(database_path.string().c_str(), &database) == SQLITE_OK);
+  CHECK(scalar(database, "SELECT COUNT(*) FROM files WHERE language = 'python'") == 5);
+  CHECK(scalar(database, "SELECT COUNT(*) FROM files WHERE language = 'cpp'") == 1);
+  CHECK(scalar(database,
+               "SELECT COUNT(*) FROM relationships relationship "
+               "JOIN symbols target ON target.id = relationship.target_symbol_id "
+               "JOIN files target_file ON target_file.id = target.file_id "
+               "WHERE relationship.kind = 'calls' AND target_file.language = 'python'") == 5);
+  sqlite3_close(database);
+}
+
 TEST_CASE("index service rejects an incompatible database schema") {
   TemporaryDirectory temporary;
   const auto database_path = temporary.path() / "index.sqlite";
@@ -230,8 +263,7 @@ TEST_CASE("index service migrates schema version three and invalidates incomplet
 
 TEST_CASE("index service reparses only added and modified files and removes deleted files") {
   TemporaryDirectory temporary;
-  const auto source =
-      std::filesystem::path(SHERPA_SOURCE_DIR) / "tests" / "fixtures" / "basic_cpp";
+  const auto source = std::filesystem::path(SHERPA_SOURCE_DIR) / "tests" / "fixtures" / "basic_cpp";
   const auto repository = temporary.path() / "repository";
   const auto database_path = temporary.path() / "incremental.sqlite";
   std::filesystem::copy(source, repository, std::filesystem::copy_options::recursive);
@@ -276,8 +308,7 @@ TEST_CASE("index service reparses only added and modified files and removes dele
 
 TEST_CASE("failed incremental persistence preserves the prior active snapshot") {
   TemporaryDirectory temporary;
-  const auto source =
-      std::filesystem::path(SHERPA_SOURCE_DIR) / "tests" / "fixtures" / "basic_cpp";
+  const auto source = std::filesystem::path(SHERPA_SOURCE_DIR) / "tests" / "fixtures" / "basic_cpp";
   const auto repository = temporary.path() / "repository";
   const auto database_path = temporary.path() / "atomic.sqlite";
   std::filesystem::copy(source, repository, std::filesystem::copy_options::recursive);

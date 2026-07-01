@@ -13,12 +13,26 @@
 namespace {
 
 sherpa::FileRecord fixture_file(const std::string& relative_path, const std::string& language) {
-  const auto root = std::filesystem::path(SHERPA_SOURCE_DIR) / "tests" / "fixtures" / "syntax_cpp";
+  const auto fixture = language == "python" ? "python" : "syntax_cpp";
+  const auto root = std::filesystem::path(SHERPA_SOURCE_DIR) / "tests" / "fixtures" / fixture;
   const auto absolute_path = root / relative_path;
   return sherpa::FileRecord{
       .absolute_path = absolute_path,
       .relative_path = relative_path,
       .language = language,
+      .content_fingerprint = sherpa::fingerprint_file(absolute_path),
+      .size_bytes = std::filesystem::file_size(absolute_path),
+  };
+}
+
+sherpa::FileRecord malformed_python_file() {
+  const auto root =
+      std::filesystem::path(SHERPA_SOURCE_DIR) / "tests" / "fixtures" / "syntax_python";
+  const auto absolute_path = root / "malformed.py";
+  return sherpa::FileRecord{
+      .absolute_path = absolute_path,
+      .relative_path = "malformed.py",
+      .language = "python",
       .content_fingerprint = sherpa::fingerprint_file(absolute_path),
       .size_bytes = std::filesystem::file_size(absolute_path),
   };
@@ -101,5 +115,50 @@ TEST_CASE("frontend preserves useful results for malformed source") {
   const auto analysis =
       sherpa::TreeSitterFrontend{}.analyze(fixture_file("src/malformed.cpp", "cpp"));
 
+  REQUIRE_FALSE(analysis.diagnostics.empty());
+}
+
+TEST_CASE("Python frontend extracts module-qualified symbols calls and imports") {
+  const auto analysis =
+      sherpa::TreeSitterFrontend{}.analyze(fixture_file("app/service.py", "python"));
+
+  REQUIRE(analysis.diagnostics.empty());
+  REQUIRE(analysis.includes.size() == 1);
+  CHECK(analysis.includes[0].target == ".utils");
+  CHECK_FALSE(analysis.includes[0].is_system);
+
+  const auto* service =
+      find_symbol(analysis, "app.service::Service", sherpa::SymbolRole::kDefinition);
+  REQUIRE(service != nullptr);
+  CHECK(service->kind == sherpa::SymbolKind::kClass);
+  CHECK(service->signature == "Service");
+
+  const auto* process =
+      find_symbol(analysis, "app.service::Service::process", sherpa::SymbolRole::kDefinition);
+  REQUIRE(process != nullptr);
+  CHECK(process->kind == sherpa::SymbolKind::kMethod);
+  CHECK(process->signature == "process(self, value:int) -> int");
+
+  REQUIRE(analysis.calls.size() == 3);
+  CHECK(analysis.calls[0].caller_qualified_name == "app.service::Service::process");
+  CHECK(analysis.calls[0].callee_name == "helper");
+  CHECK(analysis.calls[0].argument_count == 1);
+  CHECK(analysis.calls[1].callee_text == "process");
+  CHECK(analysis.calls[1].form == sherpa::CallForm::kUnqualified);
+}
+
+TEST_CASE("Python frontend extracts async functions and stub files") {
+  const auto main = sherpa::TreeSitterFrontend{}.analyze(fixture_file("app/main.py", "python"));
+  const auto* run = find_symbol(main, "app.main::run", sherpa::SymbolRole::kDefinition);
+  REQUIRE(run != nullptr);
+  CHECK(run->signature == "async run(value:int) -> int");
+
+  const auto stub = sherpa::TreeSitterFrontend{}.analyze(fixture_file("app/types.pyi", "python"));
+  REQUIRE(find_symbol(stub, "app.types::Result", sherpa::SymbolRole::kDefinition) != nullptr);
+  REQUIRE(find_symbol(stub, "app.types::make_result", sherpa::SymbolRole::kDefinition) != nullptr);
+}
+
+TEST_CASE("Python frontend retains diagnostics for malformed source") {
+  const auto analysis = sherpa::TreeSitterFrontend{}.analyze(malformed_python_file());
   REQUIRE_FALSE(analysis.diagnostics.empty());
 }

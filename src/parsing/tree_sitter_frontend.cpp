@@ -3,6 +3,7 @@
 #include <tree_sitter/api.h>
 #include <tree_sitter/tree-sitter-c.h>
 #include <tree_sitter/tree-sitter-cpp.h>
+#include <tree_sitter/tree-sitter-python.h>
 
 #include <algorithm>
 #include <cctype>
@@ -204,9 +205,9 @@ std::string qualify_name(const std::vector<std::string>& scopes, std::string_vie
 
 bool has_class_scope(const std::vector<std::string>& class_scopes) { return !class_scopes.empty(); }
 
-class Extractor {
+class CFamilyExtractor {
  public:
-  explicit Extractor(std::string_view source) : source_(source) {}
+  explicit CFamilyExtractor(std::string_view source) : source_(source) {}
 
   FileAnalysis extract(TSNode root) {
     visit(root);
@@ -473,12 +474,293 @@ class Extractor {
   std::optional<CallerContext> current_caller_;
 };
 
+std::string python_module_name(std::string relative_path) {
+  const auto extension = relative_path.rfind('.');
+  if (extension != std::string::npos) {
+    relative_path.erase(extension);
+  }
+  std::ranges::replace(relative_path, '/', '.');
+  if (relative_path == "__init__") {
+    return {};
+  }
+  constexpr std::string_view init_suffix = ".__init__";
+  if (relative_path.ends_with(init_suffix)) {
+    relative_path.erase(relative_path.size() - init_suffix.size());
+  }
+  return relative_path;
+}
+
+class PythonExtractor {
+ public:
+  PythonExtractor(std::string_view source, std::string module) : source_(source) {
+    if (!module.empty()) {
+      scopes_.push_back(std::move(module));
+      class_scopes_.push_back(false);
+    }
+  }
+
+  FileAnalysis extract(TSNode root) {
+    visit(root);
+    sort_and_deduplicate();
+    return std::move(analysis_);
+  }
+
+ private:
+  struct CallerContext {
+    std::string qualified_name;
+    std::uint32_t start_byte{};
+  };
+
+  void visit(TSNode node) {
+    record_diagnostic(node);
+    const auto type = node_type(node);
+    if (type == "class_definition") {
+      visit_class(node);
+      return;
+    }
+    if (type == "function_definition") {
+      visit_function(node);
+      return;
+    }
+    if (type == "import_statement") {
+      record_import(node);
+    } else if (type == "import_from_statement") {
+      record_from_import(node);
+    } else if (type == "call") {
+      record_call(node);
+    }
+    visit_children(node);
+  }
+
+  void visit_children(TSNode node) {
+    const std::uint32_t child_count = ts_node_named_child_count(node);
+    for (std::uint32_t index = 0; index < child_count; ++index) {
+      visit(ts_node_named_child(node, index));
+    }
+  }
+
+  void visit_class(TSNode node) {
+    const std::string name = node_text(child_by_field(node, "name"), source_);
+    if (name.empty()) {
+      visit_children(node);
+      return;
+    }
+    analysis_.symbols.push_back(SymbolRecord{
+        .kind = SymbolKind::kClass,
+        .role = SymbolRole::kDefinition,
+        .name = name,
+        .qualified_name = join_scopes(scopes_, name),
+        .signature = class_signature(node, name),
+        .range = source_range(node),
+    });
+    scopes_.push_back(name);
+    class_scopes_.push_back(true);
+    visit_children(node);
+    class_scopes_.pop_back();
+    scopes_.pop_back();
+  }
+
+  std::string class_signature(TSNode node, const std::string& name) const {
+    const TSNode superclasses = child_by_field(node, "superclasses");
+    return name + normalize_space(node_text(superclasses, source_));
+  }
+
+  void visit_function(TSNode node) {
+    const std::string name = node_text(child_by_field(node, "name"), source_);
+    if (name.empty()) {
+      visit_children(node);
+      return;
+    }
+    const std::string qualified_name = join_scopes(scopes_, name);
+    const bool method = !class_scopes_.empty() && class_scopes_.back();
+    analysis_.symbols.push_back(SymbolRecord{
+        .kind = method ? SymbolKind::kMethod : SymbolKind::kFunction,
+        .role = SymbolRole::kDefinition,
+        .name = name,
+        .qualified_name = qualified_name,
+        .signature = function_signature(node, name),
+        .range = source_range(node),
+    });
+
+    const auto previous_caller = current_caller_;
+    current_caller_ = CallerContext{
+        .qualified_name = qualified_name,
+        .start_byte = ts_node_start_byte(node),
+    };
+    scopes_.push_back(name);
+    class_scopes_.push_back(false);
+    visit_children(node);
+    class_scopes_.pop_back();
+    scopes_.pop_back();
+    current_caller_ = previous_caller;
+  }
+
+  std::string function_signature(TSNode node, const std::string& name) const {
+    std::string signature;
+    const std::string definition = node_text(node, source_);
+    if (definition.starts_with("async ")) {
+      signature = "async ";
+    }
+    signature += name;
+    signature += normalize_space(node_text(child_by_field(node, "parameters"), source_));
+    const std::string return_type =
+        normalize_space(node_text(child_by_field(node, "return_type"), source_));
+    if (!return_type.empty()) {
+      signature += " -> ";
+      signature += return_type;
+    }
+    return signature;
+  }
+
+  static TSNode import_name(TSNode node) {
+    return node_type(node) == "aliased_import" ? child_by_field(node, "name") : node;
+  }
+
+  void add_import(std::string target, TSNode evidence) {
+    if (!target.empty()) {
+      analysis_.includes.push_back(IncludeRecord{
+          .target = std::move(target),
+          .is_system = false,
+          .range = source_range(evidence),
+      });
+    }
+  }
+
+  void record_import(TSNode node) {
+    const std::uint32_t child_count = ts_node_named_child_count(node);
+    for (std::uint32_t index = 0; index < child_count; ++index) {
+      const TSNode child = ts_node_named_child(node, index);
+      add_import(node_text(import_name(child), source_), node);
+    }
+  }
+
+  void record_from_import(TSNode node) {
+    const TSNode module = child_by_field(node, "module_name");
+    std::string target = node_text(module, source_);
+    if (target.empty()) {
+      return;
+    }
+    const bool prefix_only =
+        std::ranges::all_of(target, [](char character) { return character == '.'; });
+    if (!prefix_only) {
+      add_import(std::move(target), node);
+      return;
+    }
+
+    const std::uint32_t child_count = ts_node_named_child_count(node);
+    for (std::uint32_t index = 0; index < child_count; ++index) {
+      const TSNode child = ts_node_named_child(node, index);
+      if (ts_node_start_byte(child) == ts_node_start_byte(module)) {
+        continue;
+      }
+      const auto type = node_type(child);
+      if (type == "dotted_name" || type == "aliased_import") {
+        add_import(target + node_text(import_name(child), source_), node);
+      }
+    }
+  }
+
+  void record_call(TSNode node) {
+    if (!current_caller_) {
+      return;
+    }
+    const TSNode function = child_by_field(node, "function");
+    if (is_null(function)) {
+      return;
+    }
+
+    std::string callee_text = normalize_space(node_text(function, source_));
+    std::string callee_name;
+    CallForm form = CallForm::kIndirect;
+    if (node_type(function) == "identifier") {
+      callee_name = callee_text;
+      form = CallForm::kUnqualified;
+    } else if (node_type(function) == "attribute") {
+      callee_name = node_text(child_by_field(function, "attribute"), source_);
+      if (callee_text.starts_with("self.") || callee_text.starts_with("cls.")) {
+        callee_text = callee_name;
+        form = CallForm::kUnqualified;
+      } else {
+        form = CallForm::kMember;
+      }
+    }
+    if (callee_name.empty()) {
+      callee_name = callee_text;
+    }
+
+    std::uint32_t argument_count = 0;
+    const TSNode arguments = child_by_field(node, "arguments");
+    if (!is_null(arguments)) {
+      argument_count = node_type(arguments) == "generator_expression"
+                           ? 1U
+                           : ts_node_named_child_count(arguments);
+    }
+    analysis_.calls.push_back(CallSiteRecord{
+        .caller_qualified_name = current_caller_->qualified_name,
+        .caller_start_byte = current_caller_->start_byte,
+        .callee_text = std::move(callee_text),
+        .callee_name = std::move(callee_name),
+        .form = form,
+        .argument_count = argument_count,
+        .range = source_range(node),
+    });
+  }
+
+  void record_diagnostic(TSNode node) {
+    if (!ts_node_is_error(node) && !ts_node_is_missing(node)) {
+      return;
+    }
+    const bool missing = ts_node_is_missing(node);
+    analysis_.diagnostics.push_back(DiagnosticRecord{
+        .severity = DiagnosticSeverity::kError,
+        .code = missing ? "missing-syntax" : "syntax-error",
+        .message =
+            missing ? "parser expected " + std::string(node_type(node)) : "unrecognized syntax",
+        .range = source_range(node),
+    });
+  }
+
+  void sort_and_deduplicate() {
+    auto symbol_key = [](const SymbolRecord& symbol) {
+      return std::tuple(symbol.range.start_byte, symbol.kind, symbol.role, symbol.qualified_name);
+    };
+    std::ranges::sort(analysis_.symbols,
+                      [&symbol_key](const SymbolRecord& left, const SymbolRecord& right) {
+                        return symbol_key(left) < symbol_key(right);
+                      });
+    analysis_.symbols.erase(
+        std::unique(analysis_.symbols.begin(), analysis_.symbols.end(),
+                    [&symbol_key](const SymbolRecord& left, const SymbolRecord& right) {
+                      return symbol_key(left) == symbol_key(right);
+                    }),
+        analysis_.symbols.end());
+    std::ranges::sort(analysis_.includes, {}, [](const IncludeRecord& include) {
+      return std::tuple(include.range.start_byte, include.target);
+    });
+    std::ranges::sort(analysis_.diagnostics, {}, [](const DiagnosticRecord& diagnostic) {
+      return std::tuple(diagnostic.range.start_byte, diagnostic.code);
+    });
+    std::ranges::sort(analysis_.calls, {}, [](const CallSiteRecord& call) {
+      return std::tuple(call.range.start_byte, call.callee_text);
+    });
+  }
+
+  std::string_view source_;
+  FileAnalysis analysis_;
+  std::vector<std::string> scopes_;
+  std::vector<bool> class_scopes_;
+  std::optional<CallerContext> current_caller_;
+};
+
 const TSLanguage* language_for(std::string_view language) {
   if (language == "c") {
     return tree_sitter_c();
   }
   if (language == "cpp") {
     return tree_sitter_cpp();
+  }
+  if (language == "python") {
+    return tree_sitter_python();
   }
   return nullptr;
 }
@@ -505,7 +787,11 @@ FileAnalysis TreeSitterFrontend::analyze(const FileRecord& file) const {
   if (!tree) {
     throw std::runtime_error("tree-sitter could not parse: " + file.relative_path);
   }
-  return Extractor(source).extract(ts_tree_root_node(tree.get()));
+  const TSNode root = ts_tree_root_node(tree.get());
+  if (file.language == "python") {
+    return PythonExtractor(source, python_module_name(file.relative_path)).extract(root);
+  }
+  return CFamilyExtractor(source).extract(root);
 }
 
 }  // namespace sherpa

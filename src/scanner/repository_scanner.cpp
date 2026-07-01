@@ -34,6 +34,9 @@ std::string language_for(const std::filesystem::path& path) {
   if (extension == ".c") {
     return "c";
   }
+  if (extension == ".py" || extension == ".pyi") {
+    return "python";
+  }
   return "cpp";
 }
 
@@ -45,8 +48,8 @@ bool is_within(const std::filesystem::path& root, const std::filesystem::path& c
 }  // namespace
 
 bool RepositoryScanner::is_supported_source(const std::filesystem::path& path) {
-  static constexpr std::array<std::string_view, 9> extensions = {
-      ".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".inc",
+  static constexpr std::array<std::string_view, 11> extensions = {
+      ".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".inc", ".py", ".pyi",
   };
   const auto extension = lowercase(path.extension().string());
   return std::ranges::any_of(extensions, [&extension](std::string_view supported_extension) {
