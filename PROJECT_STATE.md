@@ -8,15 +8,15 @@ session.
 
 ## Current milestone
 
-- Milestone 12, public API foundation, is complete.
-- The next proposed milestone is Milestone 13, plugin and extensibility model.
-- Milestone 13 has not been approved or started.
+- Milestone 13, plugin and extensibility model, is complete.
+- The next proposed milestone is Milestone 14, editor/VS Code integration foundation.
+- Milestone 14 has not been approved or started.
 
 ## Repository status
 
 - Repository: `https://github.com/sre0089/sherpa`
 - Active branch: `main`
-- State baseline: `1d46576` (`fix: constrain installed consumer configurations`)
+- State baseline: `f80e55d` (`feat: add versioned plugin foundation`)
 - Before this handoff update, `main` matched `origin/main` and the working tree was clean.
 - License: MIT
 
@@ -49,9 +49,13 @@ session.
 - Installable headers and static library with exported `Sherpa::Sherpa` CMake target,
   `find_package(Sherpa CONFIG REQUIRED)` support, build-tree and installed-package consumer tests,
   and CLI orchestration through the public facade.
+- Version-1 in-process plugin API with explicit registration, validated stable IDs, exact API
+  compatibility, shared ownership, deterministic before/after operation hooks, and failure errors
+  that distinguish whether core work completed.
 
 ## Latest relevant commits
 
+- `f80e55d` — versioned plugin registry, operation hooks, failure semantics, docs, ADR, and tests.
 - `1d46576` — make installed-package consumer tests correct for multi-config generators.
 - `e288fab` — make public API selector tests portable under strict GCC warnings.
 - `a4cdc9b` — public C++ API facade, package export, documentation, ADR, and consumer coverage.
@@ -66,11 +70,12 @@ session.
 
 ## Next priorities
 
-1. Present and agree on the exact Milestone 13 plugin/extensibility scope before implementation.
-2. Define extension points and lifecycle boundaries without weakening the versioned public API or
-   exposing storage/parser internals.
-3. Decide plugin discovery, compatibility, isolation, registration, and failure semantics.
-4. Keep CLI, public C++ API, JSON contracts, atomicity, and deterministic output backward-compatible.
+1. Present and agree on the exact Milestone 14 editor/VS Code integration scope before
+   implementation.
+2. Define an editor-facing process/protocol boundary that does not expose SQLite or internal C++
+   services.
+3. Decide request lifecycle, cancellation, workspace/index ownership, diagnostics, and packaging.
+4. Preserve CLI, public C++ and plugin APIs, JSON contracts, atomicity, and deterministic output.
 
 ## Key design decisions
 
@@ -90,8 +95,13 @@ session.
   remain internal.
 - Public API version 1 carries a source-compatibility policy within the `0.x` line; no stable binary
   ABI is promised. Package consumers use the exported `Sherpa::Sherpa` CMake target.
+- Plugin API version 1 is explicitly registered and observational. Hooks run in registration order
+  and cannot mutate requests, results, persistence, or graph ordering.
+- Plugins are linked into the host; shared-library discovery and a stable plugin ABI are deferred.
+- Plugin phases are fail-fast. Before-hook failures prevent core work; after-hook failures report
+  that core work already completed.
 
-Detailed decisions are recorded in [`docs/adr/`](docs/adr/), currently ADRs 0001–0009.
+Detailed decisions are recorded in [`docs/adr/`](docs/adr/), currently ADRs 0001–0010.
 
 ## Known technical debt and limitations
 
@@ -106,7 +116,9 @@ Detailed decisions are recorded in [`docs/adr/`](docs/adr/), currently ADRs 0001
   been characterized.
 - The public API currently exposes concrete result/domain types and a static library; binary ABI
   stability, shared-library symbol visibility, and deprecation tooling are not yet provided.
-- No plugin system, editor extension, network API, or LLM integration exists yet.
+- Plugins are in-process observers only. There is no dynamic discovery, stable plugin ABI,
+  isolation, parser registration, CLI command contribution, or request/result transformation.
+- No editor extension, network API, or LLM integration exists yet.
 - No committed large-repository performance baseline, fuzzing, sanitizer matrix, or long-running
   stress suite exists.
 - GitHub Actions currently warns that the pinned `lukka/run-vcpkg` action targets deprecated
@@ -130,23 +142,24 @@ See [`docs/limitations.md`](docs/limitations.md) and
 ## Testing and CI status
 
 - Local verification: `cmake --build --preset dev` and
-  `ctest --preset dev --output-on-failure` passed 69/69 tests on 2026-06-30.
+  `ctest --preset dev --output-on-failure` passed 74/74 tests on 2026-06-30.
 - Coverage includes unit, integration, CLI, migration, ambiguity, deterministic output,
   incremental reuse, deletion, relationship re-resolution, rollback behavior, public API behavior,
-  build-tree consumption, and installed-package consumption.
+  plugin registration/order/failure semantics, build-tree consumption, and installed-package
+  consumption.
 - Latest feature CI: GitHub Actions run
-  [`#29`](https://github.com/sre0089/sherpa/actions/runs/28441148071) completed successfully for:
+  [`#31`](https://github.com/sre0089/sherpa/actions/runs/28486804288) completed successfully for:
   - `ubuntu-latest`
   - `macos-latest`
   - `windows-2022`
 - The optional benchmark target builds locally but is not part of the default CI matrix.
 
-## Remaining milestone roadmap
+## Milestone roadmap
 
 The roadmap is provisional; approve and complete one milestone at a time.
 
-12. Public API foundation.
-13. Plugin and extensibility model.
+12. Public API foundation — complete.
+13. Plugin and extensibility model — complete.
 14. Editor/VS Code integration foundation.
 15. Additional language support.
 16. Packaging and release hardening for GitHub, Homebrew, and PyPI.
