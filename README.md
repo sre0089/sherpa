@@ -19,6 +19,25 @@ cmake --build --preset dev
 ctest --preset dev
 ```
 
+## Install
+
+Milestone 16 prepares three release channels:
+
+```sh
+# Homebrew tap
+brew install sre0089/tap/sherpa
+
+# PyPI CLI distribution (recommended)
+pipx install sherpa-code
+```
+
+The PyPI distribution is named `sherpa-code` because `sherpa` belongs to an unrelated project. It
+still installs the `sherpa` and `sherpa-server` commands. These commands become available after the
+first signed-off release is published and the external Homebrew tap and PyPI trusted publisher are
+configured. Native archives are attached directly to each GitHub release.
+
+See [Installation](docs/installation.md) for platforms and verification.
+
 Sherpa also installs a C++20 library and CMake package. Embedded consumers use
 `<sherpa/api/client.hpp>` and link `Sherpa::Sherpa`; see the
 [public C++ API](docs/public-api.md). Hosts can also register explicitly linked observers through
@@ -54,6 +73,7 @@ platform cache location, and `--format json` for machine-readable output. See
 [Querying the graph](docs/querying.md) for lookup rules, and the
 [Query JSON contract](docs/query-json.md) for automation. See
 [Graph export](docs/graph-export.md) for the versioned interchange format.
+[Release process](docs/releasing.md) documents artifact creation and publisher setup.
 
 ## Status
 

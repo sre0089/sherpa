@@ -7,3 +7,11 @@
 *.sqlite-shm
 *.sqlite-wal
 compile_commands.json
+__pycache__/
+*.pyc
+/packaging/python/sherpa_cli/bin/*
+!/packaging/python/sherpa_cli/bin/__init__.py
+/packaging/python/sherpa_cli/LICENSE
+/packaging/python/build/
+/packaging/python/dist/
+/packaging/python/*.egg-info/

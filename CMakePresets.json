@@ -43,6 +43,21 @@
         "BUILD_TESTING": "ON",
         "SHERPA_WARNINGS_AS_ERRORS": "ON"
       }
+    },
+    {
+      "name": "release-windows",
+      "displayName": "Windows release build",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/release-windows",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "cacheVariables": {
+        "BUILD_TESTING": "OFF"
+      }
     }
   ],
   "buildPresets": [
@@ -58,6 +73,11 @@
       "name": "dev-windows",
       "configurePreset": "dev-windows",
       "configuration": "Debug"
+    },
+    {
+      "name": "release-windows",
+      "configurePreset": "release-windows",
+      "configuration": "Release"
     }
   ],
   "testPresets": [

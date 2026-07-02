@@ -220,6 +220,10 @@ install(
   NAMESPACE Sherpa::
   DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/Sherpa"
 )
+install(
+  FILES README.md CHANGELOG.md LICENSE
+  DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/doc/sherpa"
+)
 
 if(BUILD_TESTING)
   find_package(Catch2 3 CONFIG REQUIRED)
@@ -376,5 +380,18 @@ if(BUILD_TESTING)
     )
   else()
     message(WARNING "Node.js was not found; VS Code extension tests are disabled")
+  endif()
+
+  find_package(Python3 3.10 COMPONENTS Interpreter QUIET)
+  if(Python3_Interpreter_FOUND)
+    add_test(
+      NAME release_packaging_tests
+      COMMAND
+        "${Python3_EXECUTABLE}" -m unittest discover
+        -s "${CMAKE_CURRENT_SOURCE_DIR}/packaging/tests"
+        -p "test_*.py"
+    )
+  else()
+    message(WARNING "Python 3 was not found; release packaging tests are disabled")
   endif()
 endif()

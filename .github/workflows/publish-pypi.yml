@@ -1,0 +1,48 @@
+name: Publish PyPI
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing successful Sherpa release tag
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-22.04
+    environment:
+      name: pypi
+      url: https://pypi.org/project/sherpa-code/
+
+    steps:
+      - name: Check out released source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
+      - name: Validate release metadata
+        run: >-
+          python packaging/scripts/release_tools.py validate
+          --root .
+          --tag "${{ inputs.tag }}"
+
+      - name: Download released wheels
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download "${{ inputs.tag }}" --pattern "*.whl" --dir dist
+
+      - name: Publish with PyPI trusted publishing
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
+        with:
+          packages-dir: dist/
+          print-hash: true
